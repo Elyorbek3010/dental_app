@@ -21,6 +21,14 @@ from app.schemas.queue import (
     ReceptionQueueSpecializationResponse,
     WalkInPatientCreate,
 )
+from app.schemas.public import (
+    PublicDisplayClinic,
+    PublicDisplayDoctor,
+    PublicDisplayQueue,
+    PublicDisplayResponse,
+    PublicDisplaySpecialization,
+    PublicDisplayTicket,
+)
 
 __all__ = [
     "UserRegister",
@@ -43,4 +51,10 @@ __all__ = [
     "WalkInPatientCreate",
     "CheckInQRResponse",
     "PatientQRCheckInRequest",
+    "PublicDisplayClinic",
+    "PublicDisplayDoctor",
+    "PublicDisplaySpecialization",
+    "PublicDisplayTicket",
+    "PublicDisplayQueue",
+    "PublicDisplayResponse",
 ]

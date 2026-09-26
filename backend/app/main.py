@@ -3,6 +3,7 @@ from sqlalchemy import text
 
 from app.api.auth import router as auth_router
 from app.api.catalog import router as catalog_router
+from app.api.public import router as public_router
 from app.api.queues import router as queues_router
 from app.db.session import engine
 
@@ -14,6 +15,7 @@ app = FastAPI(
 app.include_router(auth_router)
 app.include_router(catalog_router)
 app.include_router(queues_router)
+app.include_router(public_router)
 
 
 @app.get("/api/health")
