@@ -1,7 +1,7 @@
 from datetime import datetime
 from enum import Enum
 
-from sqlalchemy import DateTime, Enum as SAEnum, ForeignKey, String, UniqueConstraint, func
+from sqlalchemy import CheckConstraint, DateTime, Enum as SAEnum, ForeignKey, Integer, String, UniqueConstraint, func, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -21,11 +21,18 @@ class TicketSource(str, Enum):
     WALK_IN = "WALK_IN"
 
 
+class CheckInMethod(str, Enum):
+    QR = "QR"
+    RECEPTION = "RECEPTION"
+    WALK_IN = "WALK_IN"
+
+
 class QueueTicket(Base):
     __tablename__ = "queue_tickets"
     __table_args__ = (
         UniqueConstraint("queue_id", "ticket_number", name="uq_queue_ticket_number"),
         UniqueConstraint("queue_id", "queue_position", name="uq_queue_ticket_position"),
+        CheckConstraint("missed_turns >= 0", name="ck_queue_ticket_missed_turns_non_negative"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -75,4 +82,23 @@ class QueueTicket(Base):
         DateTime(timezone=True),
         nullable=False,
         server_default=func.now(),
+    )
+
+    checked_in_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+        default=None,
+    )
+
+    check_in_method: Mapped[CheckInMethod | None] = mapped_column(
+        SAEnum(CheckInMethod),
+        nullable=True,
+        default=None,
+    )
+
+    missed_turns: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+        server_default=text("0"),
     )

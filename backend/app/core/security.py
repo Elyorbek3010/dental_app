@@ -55,3 +55,31 @@ def decode_refresh_token(token: str) -> int:
         return int(sub)
     except (ValueError, TypeError):
         raise JWTError("Invalid subject format in refresh token")
+
+
+def create_check_in_qr_token(clinic_id: int) -> str:
+    expire = datetime.now(timezone.utc) + timedelta(
+        minutes=settings.CHECK_IN_QR_EXPIRE_MINUTES
+    )
+    to_encode = {
+        "type": "check_in_qr",
+        "clinic_id": clinic_id,
+        "exp": expire,
+    }
+    return jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
+
+
+def decode_check_in_qr_token(token: str) -> int:
+    payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+    if payload.get("type") != "check_in_qr":
+        raise JWTError("Invalid token type: expected check_in_qr token")
+    clinic_id = payload.get("clinic_id")
+    if clinic_id is None:
+        raise JWTError("Token missing clinic_id")
+    if isinstance(clinic_id, bool):
+        raise JWTError("Invalid clinic_id type in check_in_qr token")
+    try:
+        return int(clinic_id)
+    except (ValueError, TypeError):
+        raise JWTError("Invalid clinic_id format in check_in_qr token")
+

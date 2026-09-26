@@ -2,7 +2,7 @@ from datetime import date, datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.models.queue_ticket import TicketSource, TicketStatus
+from app.models.queue_ticket import CheckInMethod, TicketSource, TicketStatus
 
 
 class WalkInPatientCreate(BaseModel):
@@ -31,6 +31,9 @@ class QueueTicketResponse(BaseModel):
     source: TicketSource
     status: TicketStatus
     created_at: datetime
+    checked_in_at: datetime | None = None
+    check_in_method: CheckInMethod | None = None
+    missed_turns: int = 0
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -97,4 +100,15 @@ class ReceptionQueueOverviewResponse(BaseModel):
     serving_count: int
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class CheckInQRResponse(BaseModel):
+    token: str
+    expires_in_seconds: int
+
+
+class PatientQRCheckInRequest(BaseModel):
+    token: str = Field(..., min_length=1)
+
+
 

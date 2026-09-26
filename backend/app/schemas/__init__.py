@@ -8,9 +8,11 @@ from app.schemas.auth import (
 )
 from app.schemas.catalog import DoctorResponse, SpecializationResponse
 from app.schemas.queue import (
+    CheckInQRResponse,
     MyQueueTicketResponse,
     MyTicketDoctorResponse,
     MyTicketSpecializationResponse,
+    PatientQRCheckInRequest,
     QueueResponse,
     QueueStatusResponse,
     QueueTicketResponse,
@@ -39,4 +41,6 @@ __all__ = [
     "ReceptionQueueSpecializationResponse",
     "ReceptionQueueOverviewResponse",
     "WalkInPatientCreate",
+    "CheckInQRResponse",
+    "PatientQRCheckInRequest",
 ]

@@ -1,19 +1,25 @@
-from datetime import date
+from datetime import date, datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from jose import JWTError
 from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_db, require_roles
+from app.core.config import settings
+from app.core.security import create_check_in_qr_token, decode_check_in_qr_token
+from app.models.clinic import Clinic
 from app.models.doctor import Doctor
 from app.models.queue import Queue
-from app.models.queue_ticket import QueueTicket, TicketSource, TicketStatus
+from app.models.queue_ticket import CheckInMethod, QueueTicket, TicketSource, TicketStatus
 from app.models.specialization import Specialization
 from app.models.user import User, UserRole
 from app.schemas.queue import (
+    CheckInQRResponse,
     MyQueueTicketResponse,
     MyTicketDoctorResponse,
     MyTicketSpecializationResponse,
+    PatientQRCheckInRequest,
     QueueResponse,
     QueueStatusResponse,
     QueueTicketResponse,
@@ -166,6 +172,109 @@ def get_reception_today_queues(
         )
         for queue, doctor, specialization, waiting_count, called_count, serving_count in results
     ]
+
+
+@router.get(
+    "/check-in/qr-token",
+    response_model=CheckInQRResponse,
+)
+def get_check_in_qr_token(
+    clinic_id: int | None = Query(default=None, description="Clinic ID (required for admin)"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles(UserRole.RECEPTIONIST, UserRole.ADMIN)),
+) -> CheckInQRResponse:
+    if current_user.role == UserRole.RECEPTIONIST:
+        if current_user.clinic_id is None:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Receptionist is not assigned to a clinic",
+            )
+        if clinic_id is not None and clinic_id != current_user.clinic_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Cannot request QR token for another clinic",
+            )
+        target_clinic_id = current_user.clinic_id
+    else:  # ADMIN
+        if clinic_id is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="clinic_id query parameter is required for admin",
+            )
+        target_clinic_id = clinic_id
+
+    clinic = db.scalar(select(Clinic).where(Clinic.id == target_clinic_id))
+    if not clinic:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Clinic not found",
+        )
+
+    token = create_check_in_qr_token(target_clinic_id)
+    return CheckInQRResponse(
+        token=token,
+        expires_in_seconds=settings.CHECK_IN_QR_EXPIRE_MINUTES * 60,
+    )
+
+
+@router.post(
+    "/check-in/qr",
+    response_model=QueueTicketResponse,
+)
+def qr_check_in_patient(
+    request: PatientQRCheckInRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles(UserRole.PATIENT)),
+) -> QueueTicket:
+    try:
+        clinic_id = decode_check_in_qr_token(request.token)
+    except JWTError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired check-in QR code",
+        )
+
+    today = date.today()
+
+    tickets = db.scalars(
+        select(QueueTicket)
+        .join(Queue, QueueTicket.queue_id == Queue.id)
+        .join(Doctor, Queue.doctor_id == Doctor.id)
+        .where(
+            QueueTicket.patient_id == current_user.id,
+            QueueTicket.source == TicketSource.ONLINE,
+            QueueTicket.status == TicketStatus.WAITING,
+            Doctor.clinic_id == clinic_id,
+            Queue.queue_date == today,
+            Queue.is_active == True,
+        )
+    ).all()
+
+    if not tickets:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No active waiting ticket found for this clinic",
+        )
+
+    if len(tickets) > 1:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Multiple active waiting tickets found for this clinic",
+        )
+
+    ticket = tickets[0]
+
+    if ticket.checked_in_at is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Ticket is already checked in",
+        )
+
+    ticket.checked_in_at = datetime.now(timezone.utc)
+    ticket.check_in_method = CheckInMethod.QR
+    db.commit()
+    db.refresh(ticket)
+    return ticket
 
 
 @router.get(
@@ -351,6 +460,117 @@ def get_queue_tickets(
     ).all()
 
     return list(tickets)
+
+
+@router.post(
+    "/{queue_id}/call-next",
+    response_model=QueueTicketResponse,
+)
+def call_next_patient(
+    queue_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles(UserRole.RECEPTIONIST, UserRole.ADMIN)),
+) -> QueueTicket:
+    # Lock the Queue row for update before reading/reordering tickets
+    queue = db.scalar(
+        select(Queue).where(Queue.id == queue_id).with_for_update()
+    )
+    if not queue:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Queue not found",
+        )
+
+    doctor = db.scalar(select(Doctor).where(Doctor.id == queue.doctor_id))
+    if not doctor:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Doctor not found",
+        )
+
+    if current_user.role == UserRole.RECEPTIONIST:
+        if current_user.clinic_id is None:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Receptionist is not assigned to a clinic",
+            )
+        if current_user.clinic_id != doctor.clinic_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Cannot access another clinic's queue",
+            )
+
+    if not queue.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Queue is not active",
+        )
+
+    if queue.is_paused:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Queue is paused",
+        )
+
+    # Active patient safety: check whether queue already has a CALLED or SERVING ticket
+    active_ticket = db.scalar(
+        select(QueueTicket).where(
+            QueueTicket.queue_id == queue.id,
+            QueueTicket.status.in_([TicketStatus.CALLED, TicketStatus.SERVING]),
+        ).limit(1)
+    )
+    if active_ticket:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Queue already has an active patient",
+        )
+
+    # Load WAITING tickets for this queue in queue_position order
+    waiting_tickets = list(
+        db.scalars(
+            select(QueueTicket)
+            .where(
+                QueueTicket.queue_id == queue.id,
+                QueueTicket.status == TicketStatus.WAITING,
+            )
+            .order_by(QueueTicket.queue_position.asc())
+        ).all()
+    )
+
+    if not waiting_tickets:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No waiting tickets",
+        )
+
+    current_max_pos = db.scalar(
+        select(func.coalesce(func.max(QueueTicket.queue_position), 0)).where(
+            QueueTicket.queue_id == queue.id
+        )
+    ) or 0
+
+    called_ticket: QueueTicket | None = None
+
+    for ticket in waiting_tickets:
+        if ticket.checked_in_at is None:
+            current_max_pos += 1
+            ticket.missed_turns += 1
+            ticket.queue_position = current_max_pos
+        else:
+            ticket.status = TicketStatus.CALLED
+            called_ticket = ticket
+            break
+
+    if not called_ticket:
+        db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="No checked-in patient available",
+        )
+
+    db.commit()
+    db.refresh(called_ticket)
+    return called_ticket
 
 
 @router.patch(
@@ -724,6 +944,156 @@ def cancel_patient(
     return ticket
 
 
+@router.patch(
+    "/{queue_id}/tickets/{ticket_id}/check-in",
+    response_model=QueueTicketResponse,
+)
+def manual_check_in_patient(
+    queue_id: int,
+    ticket_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles(UserRole.RECEPTIONIST, UserRole.ADMIN)),
+) -> QueueTicket:
+    queue = db.scalar(select(Queue).where(Queue.id == queue_id))
+    if not queue:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Queue not found",
+        )
+
+    doctor = db.scalar(select(Doctor).where(Doctor.id == queue.doctor_id))
+    if not doctor:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Doctor not found",
+        )
+
+    if current_user.role == UserRole.RECEPTIONIST:
+        if current_user.clinic_id is None:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Receptionist is not assigned to a clinic",
+            )
+        if current_user.clinic_id != doctor.clinic_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Cannot access another clinic's queue",
+            )
+
+    ticket = db.scalar(
+        select(QueueTicket).where(
+            QueueTicket.id == ticket_id,
+            QueueTicket.queue_id == queue_id,
+        )
+    )
+    if not ticket:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Ticket not found in this queue",
+        )
+
+    if ticket.source != TicketSource.ONLINE:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Walk-in tickets are already checked in",
+        )
+
+    if ticket.status != TicketStatus.WAITING:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Only waiting tickets can be checked in",
+        )
+
+    if ticket.checked_in_at is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Ticket is already checked in",
+        )
+
+    ticket.checked_in_at = datetime.now(timezone.utc)
+    ticket.check_in_method = CheckInMethod.RECEPTION
+    db.commit()
+    db.refresh(ticket)
+    return ticket
+
+
+@router.patch(
+    "/{queue_id}/tickets/{ticket_id}/miss-turn",
+    response_model=QueueTicketResponse,
+)
+def miss_turn_patient(
+    queue_id: int,
+    ticket_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles(UserRole.RECEPTIONIST, UserRole.ADMIN)),
+) -> QueueTicket:
+    # Lock the Queue row for update to ensure concurrency-safe queue_position calculation
+    queue = db.scalar(
+        select(Queue).where(Queue.id == queue_id).with_for_update()
+    )
+    if not queue:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Queue not found",
+        )
+
+    doctor = db.scalar(select(Doctor).where(Doctor.id == queue.doctor_id))
+    if not doctor:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Doctor not found",
+        )
+
+    if current_user.role == UserRole.RECEPTIONIST:
+        if current_user.clinic_id is None:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Receptionist is not assigned to a clinic",
+            )
+        if current_user.clinic_id != doctor.clinic_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Cannot access another clinic's queue",
+            )
+
+    ticket = db.scalar(
+        select(QueueTicket).where(
+            QueueTicket.id == ticket_id,
+            QueueTicket.queue_id == queue_id,
+        )
+    )
+    if not ticket:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Ticket not found in this queue",
+        )
+
+    if ticket.status != TicketStatus.WAITING:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Only waiting tickets can miss a turn",
+        )
+
+    if ticket.checked_in_at is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Checked-in ticket cannot miss a turn",
+        )
+
+    current_max_pos = db.scalar(
+        select(func.coalesce(func.max(QueueTicket.queue_position), 0)).where(
+            QueueTicket.queue_id == queue.id
+        )
+    )
+    next_queue_position = (current_max_pos or 0) + 1
+
+    ticket.missed_turns += 1
+    ticket.queue_position = next_queue_position
+    db.commit()
+    db.refresh(ticket)
+    return ticket
+
+
 @router.post(
     "/{queue_id}/join",
     response_model=QueueTicketResponse,
@@ -881,6 +1251,8 @@ def add_walk_in_patient(
         queue_position=next_queue_position,
         source=TicketSource.WALK_IN,
         status=TicketStatus.WAITING,
+        checked_in_at=datetime.now(timezone.utc),
+        check_in_method=CheckInMethod.WALK_IN,
     )
     db.add(ticket)
     db.commit()
