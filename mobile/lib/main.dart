@@ -1,14 +1,19 @@
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 
+import 'screens/reminders_screen.dart';
+import 'services/local_notification_service.dart';
 import 'services/push_notification_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp();
 
-  // Initialize push notifications (permissions, token logging, refresh & foreground listeners)
+  // Initialize server push notifications (FCM)
   await PushNotificationService.instance.initialize();
+
+  // Initialize local notifications (personal reminders)
+  await LocalNotificationService.instance.initialize();
 
   runApp(const MyApp());
 }
@@ -93,6 +98,20 @@ class _MyHomePageState extends State<MyHomePage> {
         // Here we take the value from the MyHomePage object that was created by
         // the App.build method, and use it to set our appbar title.
         title: Text(widget.title),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.alarm),
+            tooltip: 'Shaxsiy eslatmalar',
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute<void>(
+                  builder: (context) => const RemindersScreen(),
+                ),
+              );
+            },
+          ),
+        ],
       ),
       body: Center(
         // Center is a layout widget. It takes a single child and positions it
@@ -117,6 +136,19 @@ class _MyHomePageState extends State<MyHomePage> {
             Text(
               '$_counter',
               style: Theme.of(context).textTheme.headlineMedium,
+            ),
+            const SizedBox(height: 24),
+            ElevatedButton.icon(
+              icon: const Icon(Icons.notifications_active_outlined),
+              label: const Text('Shaxsiy eslatmalar'),
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute<void>(
+                    builder: (context) => const RemindersScreen(),
+                  ),
+                );
+              },
             ),
           ],
         ),
