@@ -15,6 +15,16 @@ from app.models.queue_ticket import CheckInMethod, QueueTicket, TicketSource, Ti
 from app.models.specialization import Specialization
 from app.models.user import User, UserRole
 from app.realtime import notify_display_update
+from app.services.queue_notifications import (
+    schedule_approaching_check,
+    schedule_called_notification,
+    schedule_completed_notification,
+    schedule_joined_notification,
+    schedule_missed_turn_notification,
+    schedule_paused_notification,
+    schedule_resumed_notification,
+    trigger_missed_turn_notification,
+)
 from app.schemas.queue import (
     CheckInQRResponse,
     MyQueueTicketResponse,
@@ -372,6 +382,7 @@ def pause_queue(
     db.commit()
     db.refresh(queue)
     notify_display_update(doctor.clinic_id, background_tasks)
+    schedule_paused_notification(queue.id, background_tasks)
     return queue
 
 
@@ -427,6 +438,7 @@ def resume_queue(
     db.commit()
     db.refresh(queue)
     notify_display_update(doctor.clinic_id, background_tasks)
+    schedule_resumed_notification(queue.id, background_tasks)
     return queue
 
 
@@ -558,12 +570,15 @@ def call_next_patient(
     ) or 0
 
     called_ticket: QueueTicket | None = None
+    passed_ticket_ids: list[int] = []
 
     for ticket in waiting_tickets:
         if ticket.checked_in_at is None:
             current_max_pos += 1
             ticket.missed_turns += 1
             ticket.queue_position = current_max_pos
+            if ticket.patient_id is not None:
+                passed_ticket_ids.append(ticket.id)
         else:
             ticket.status = TicketStatus.CALLED
             called_ticket = ticket
@@ -571,6 +586,8 @@ def call_next_patient(
 
     if not called_ticket:
         db.commit()
+        for passed_id in passed_ticket_ids:
+            trigger_missed_turn_notification(passed_id)
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="No checked-in patient available",
@@ -579,6 +596,11 @@ def call_next_patient(
     db.commit()
     db.refresh(called_ticket)
     notify_display_update(doctor.clinic_id, background_tasks)
+    for passed_id in passed_ticket_ids:
+        schedule_missed_turn_notification(passed_id, background_tasks)
+    if called_ticket.patient_id is not None:
+        schedule_called_notification(called_ticket.id, doctor.room_number, background_tasks)
+    schedule_approaching_check(queue.id, background_tasks)
     return called_ticket
 
 
@@ -641,6 +663,9 @@ def call_patient(
     db.commit()
     db.refresh(ticket)
     notify_display_update(doctor.clinic_id, background_tasks)
+    if ticket.patient_id is not None:
+        schedule_called_notification(ticket.id, doctor.room_number, background_tasks)
+    schedule_approaching_check(queue.id, background_tasks)
     return ticket
 
 
@@ -703,6 +728,7 @@ def serve_patient(
     db.commit()
     db.refresh(ticket)
     notify_display_update(doctor.clinic_id, background_tasks)
+    schedule_approaching_check(queue.id, background_tasks)
     return ticket
 
 
@@ -765,6 +791,9 @@ def complete_patient(
     db.commit()
     db.refresh(ticket)
     notify_display_update(doctor.clinic_id, background_tasks)
+    if ticket.patient_id is not None:
+        schedule_completed_notification(ticket.id, background_tasks)
+    schedule_approaching_check(queue.id, background_tasks)
     return ticket
 
 
@@ -827,6 +856,7 @@ def skip_patient(
     db.commit()
     db.refresh(ticket)
     notify_display_update(doctor.clinic_id, background_tasks)
+    schedule_approaching_check(queue.id, background_tasks)
     return ticket
 
 
@@ -900,6 +930,7 @@ def restore_patient(
     db.commit()
     db.refresh(ticket)
     notify_display_update(doctor.clinic_id, background_tasks)
+    schedule_approaching_check(queue.id, background_tasks)
     return ticket
 
 
@@ -962,6 +993,7 @@ def cancel_patient(
     db.commit()
     db.refresh(ticket)
     notify_display_update(doctor.clinic_id, background_tasks)
+    schedule_approaching_check(queue.id, background_tasks)
     return ticket
 
 
@@ -1116,6 +1148,9 @@ def miss_turn_patient(
     db.commit()
     db.refresh(ticket)
     notify_display_update(doctor.clinic_id, background_tasks)
+    if ticket.patient_id is not None:
+        schedule_missed_turn_notification(ticket.id, background_tasks)
+    schedule_approaching_check(queue.id, background_tasks)
     return ticket
 
 
@@ -1126,6 +1161,7 @@ def miss_turn_patient(
 )
 def join_queue(
     queue_id: int,
+    background_tasks: BackgroundTasks = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_roles(UserRole.PATIENT)),
 ) -> QueueTicket:
@@ -1197,6 +1233,8 @@ def join_queue(
     db.add(ticket)
     db.commit()
     db.refresh(ticket)
+    schedule_joined_notification(ticket.id, background_tasks)
+    schedule_approaching_check(queue.id, background_tasks)
     return ticket
 
 
@@ -1284,4 +1322,5 @@ def add_walk_in_patient(
     db.commit()
     db.refresh(ticket)
     notify_display_update(doctor.clinic_id, background_tasks)
+    schedule_approaching_check(queue.id, background_tasks)
     return ticket

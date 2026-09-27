@@ -102,3 +102,9 @@ class QueueTicket(Base):
         default=0,
         server_default=text("0"),
     )
+
+    approaching_notified_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+        default=None,
+    )

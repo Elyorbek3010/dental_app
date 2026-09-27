@@ -38,3 +38,6 @@ web/dist/
 .pytest_cache/
 .coverage
 htmlcov/
+
+# Firebase private credentials
+backend/secrets/

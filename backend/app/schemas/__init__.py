@@ -7,6 +7,15 @@ from app.schemas.auth import (
     UserResponse,
 )
 from app.schemas.catalog import DoctorResponse, SpecializationResponse
+from app.schemas.notification import DeviceTokenRequest, PushDeviceResponse
+from app.schemas.public import (
+    PublicDisplayClinic,
+    PublicDisplayDoctor,
+    PublicDisplayQueue,
+    PublicDisplayResponse,
+    PublicDisplaySpecialization,
+    PublicDisplayTicket,
+)
 from app.schemas.queue import (
     CheckInQRResponse,
     MyQueueTicketResponse,
@@ -20,14 +29,6 @@ from app.schemas.queue import (
     ReceptionQueueOverviewResponse,
     ReceptionQueueSpecializationResponse,
     WalkInPatientCreate,
-)
-from app.schemas.public import (
-    PublicDisplayClinic,
-    PublicDisplayDoctor,
-    PublicDisplayQueue,
-    PublicDisplayResponse,
-    PublicDisplaySpecialization,
-    PublicDisplayTicket,
 )
 
 __all__ = [
@@ -57,4 +58,6 @@ __all__ = [
     "PublicDisplayTicket",
     "PublicDisplayQueue",
     "PublicDisplayResponse",
+    "DeviceTokenRequest",
+    "PushDeviceResponse",
 ]

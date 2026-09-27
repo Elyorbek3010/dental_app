@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "635684120584",
+    "project_id": "dental-queue-d2d54",
+    "storage_bucket": "dental-queue-d2d54.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:635684120584:android:bf008a579e9c9d39fc09bd",
+        "android_client_info": {
+          "package_name": "uz.dentalqueue.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAx0SJ3Eyi-ufuyIsQJ-PEskpr5uf1nZHE"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

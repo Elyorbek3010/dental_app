@@ -1,5 +1,6 @@
 from app.models.clinic import Clinic
 from app.models.doctor import Doctor
+from app.models.push_device import PushDevice
 from app.models.queue import Queue
 from app.models.queue_ticket import CheckInMethod, QueueTicket, TicketSource, TicketStatus
 from app.models.specialization import Specialization
@@ -16,4 +17,5 @@ __all__ = [
     "TicketSource",
     "User",
     "UserRole",
+    "PushDevice",
 ]
