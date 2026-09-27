@@ -1,15 +1,18 @@
 from datetime import date
+import json
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_db
+from app.db.session import SessionLocal
 from app.models.clinic import Clinic
 from app.models.doctor import Doctor
 from app.models.queue import Queue
 from app.models.queue_ticket import QueueTicket, TicketStatus
 from app.models.specialization import Specialization
+from app.realtime import manager
 from app.schemas.public import (
     PublicDisplayClinic,
     PublicDisplayDoctor,
@@ -23,6 +26,51 @@ router = APIRouter(
     prefix="/api/public",
     tags=["Public"],
 )
+
+
+@router.websocket("/ws/clinics/{clinic_id}/display")
+async def public_clinic_display_websocket(
+    websocket: WebSocket,
+    clinic_id: int,
+) -> None:
+    # Validate clinic existence using a short-lived DB session
+    # Avoid holding a PostgreSQL connection during the long-running socket lifetime
+    with SessionLocal() as db:
+        clinic_exists = db.scalar(
+            select(Clinic.id).where(Clinic.id == clinic_id)
+        ) is not None
+
+    if not clinic_exists:
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="Clinic not found")
+        return
+
+    # Accept connection and register with connection manager
+    await manager.connect(clinic_id, websocket)
+
+    try:
+        # Send safe initial connection handshake message
+        await websocket.send_json({
+            "type": "connected",
+            "clinic_id": clinic_id,
+        })
+
+        # Keep connection alive; process client messages (safe ping/pong)
+        while True:
+            data = await websocket.receive_text()
+            try:
+                payload = json.loads(data)
+                if isinstance(payload, dict) and payload.get("type") == "ping":
+                    await websocket.send_json({"type": "pong"})
+            except json.JSONDecodeError:
+                if data.strip().lower() == "ping":
+                    await websocket.send_json({"type": "pong"})
+    except WebSocketDisconnect:
+        pass
+    except Exception:
+        pass
+    finally:
+        manager.disconnect(clinic_id, websocket)
+
 
 
 @router.get(

@@ -2,10 +2,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { fetchPublicDisplay } from '../api/display';
 import type { PublicDisplayResponse } from '../types/display';
+import { usePublicDisplayRealtime } from './usePublicDisplayRealtime';
 
 const POLL_INTERVAL_MS = 10000;
 
-interface UsePublicDisplayResult {
+export interface UsePublicDisplayResult {
   data: PublicDisplayResponse | null;
   loading: boolean;
   error: string | null;
@@ -46,6 +47,14 @@ export function usePublicDisplay(clinicId: string | undefined): UsePublicDisplay
     }
   }, [clinicId]);
 
+  // Realtime WebSocket listener: triggers immediate HTTP refetch when display_updated event is received
+  usePublicDisplayRealtime({
+    clinicId,
+    onDisplayUpdated: useCallback(() => {
+      void performFetch(false);
+    }, [performFetch]),
+  });
+
   useEffect(() => {
     isMountedRef.current = true;
 
@@ -80,3 +89,5 @@ export function usePublicDisplay(clinicId: string | undefined): UsePublicDisplay
     refetch,
   };
 }
+
+export { usePublicDisplayRealtime };

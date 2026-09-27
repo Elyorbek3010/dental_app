@@ -30,3 +30,8 @@ export interface PublicDisplayResponse {
   clinic: PublicDisplayClinic;
   queues: PublicDisplayQueue[];
 }
+
+export interface PublicDisplayWsMessage {
+  type: string;
+  clinic_id?: number;
+}

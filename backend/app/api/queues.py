@@ -1,6 +1,6 @@
 from datetime import date, datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 from jose import JWTError
 from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session
@@ -14,6 +14,7 @@ from app.models.queue import Queue
 from app.models.queue_ticket import CheckInMethod, QueueTicket, TicketSource, TicketStatus
 from app.models.specialization import Specialization
 from app.models.user import User, UserRole
+from app.realtime import notify_display_update
 from app.schemas.queue import (
     CheckInQRResponse,
     MyQueueTicketResponse,
@@ -223,6 +224,7 @@ def get_check_in_qr_token(
 )
 def qr_check_in_patient(
     request: PatientQRCheckInRequest,
+    background_tasks: BackgroundTasks = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_roles(UserRole.PATIENT)),
 ) -> QueueTicket:
@@ -274,6 +276,7 @@ def qr_check_in_patient(
     ticket.check_in_method = CheckInMethod.QR
     db.commit()
     db.refresh(ticket)
+    notify_display_update(clinic_id, background_tasks)
     return ticket
 
 
@@ -323,6 +326,7 @@ def get_queue_status(
 )
 def pause_queue(
     queue_id: int,
+    background_tasks: BackgroundTasks = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_roles(UserRole.RECEPTIONIST, UserRole.ADMIN)),
 ) -> Queue:
@@ -367,6 +371,7 @@ def pause_queue(
     queue.is_paused = True
     db.commit()
     db.refresh(queue)
+    notify_display_update(doctor.clinic_id, background_tasks)
     return queue
 
 
@@ -376,6 +381,7 @@ def pause_queue(
 )
 def resume_queue(
     queue_id: int,
+    background_tasks: BackgroundTasks = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_roles(UserRole.RECEPTIONIST, UserRole.ADMIN)),
 ) -> Queue:
@@ -420,6 +426,7 @@ def resume_queue(
     queue.is_paused = False
     db.commit()
     db.refresh(queue)
+    notify_display_update(doctor.clinic_id, background_tasks)
     return queue
 
 
@@ -468,6 +475,7 @@ def get_queue_tickets(
 )
 def call_next_patient(
     queue_id: int,
+    background_tasks: BackgroundTasks = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_roles(UserRole.RECEPTIONIST, UserRole.ADMIN)),
 ) -> QueueTicket:
@@ -570,6 +578,7 @@ def call_next_patient(
 
     db.commit()
     db.refresh(called_ticket)
+    notify_display_update(doctor.clinic_id, background_tasks)
     return called_ticket
 
 
@@ -580,6 +589,7 @@ def call_next_patient(
 def call_patient(
     queue_id: int,
     ticket_id: int,
+    background_tasks: BackgroundTasks = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_roles(UserRole.RECEPTIONIST, UserRole.ADMIN)),
 ) -> QueueTicket:
@@ -630,6 +640,7 @@ def call_patient(
     ticket.status = TicketStatus.CALLED
     db.commit()
     db.refresh(ticket)
+    notify_display_update(doctor.clinic_id, background_tasks)
     return ticket
 
 
@@ -640,6 +651,7 @@ def call_patient(
 def serve_patient(
     queue_id: int,
     ticket_id: int,
+    background_tasks: BackgroundTasks = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_roles(UserRole.RECEPTIONIST, UserRole.ADMIN)),
 ) -> QueueTicket:
@@ -690,6 +702,7 @@ def serve_patient(
     ticket.status = TicketStatus.SERVING
     db.commit()
     db.refresh(ticket)
+    notify_display_update(doctor.clinic_id, background_tasks)
     return ticket
 
 
@@ -700,6 +713,7 @@ def serve_patient(
 def complete_patient(
     queue_id: int,
     ticket_id: int,
+    background_tasks: BackgroundTasks = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_roles(UserRole.RECEPTIONIST, UserRole.ADMIN)),
 ) -> QueueTicket:
@@ -750,6 +764,7 @@ def complete_patient(
     ticket.status = TicketStatus.COMPLETED
     db.commit()
     db.refresh(ticket)
+    notify_display_update(doctor.clinic_id, background_tasks)
     return ticket
 
 
@@ -760,6 +775,7 @@ def complete_patient(
 def skip_patient(
     queue_id: int,
     ticket_id: int,
+    background_tasks: BackgroundTasks = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_roles(UserRole.RECEPTIONIST, UserRole.ADMIN)),
 ) -> QueueTicket:
@@ -810,6 +826,7 @@ def skip_patient(
     ticket.status = TicketStatus.SKIPPED
     db.commit()
     db.refresh(ticket)
+    notify_display_update(doctor.clinic_id, background_tasks)
     return ticket
 
 
@@ -820,6 +837,7 @@ def skip_patient(
 def restore_patient(
     queue_id: int,
     ticket_id: int,
+    background_tasks: BackgroundTasks = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_roles(UserRole.RECEPTIONIST, UserRole.ADMIN)),
 ) -> QueueTicket:
@@ -881,6 +899,7 @@ def restore_patient(
     ticket.queue_position = new_queue_position
     db.commit()
     db.refresh(ticket)
+    notify_display_update(doctor.clinic_id, background_tasks)
     return ticket
 
 
@@ -891,6 +910,7 @@ def restore_patient(
 def cancel_patient(
     queue_id: int,
     ticket_id: int,
+    background_tasks: BackgroundTasks = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_roles(UserRole.RECEPTIONIST, UserRole.ADMIN)),
 ) -> QueueTicket:
@@ -941,6 +961,7 @@ def cancel_patient(
     ticket.status = TicketStatus.CANCELLED
     db.commit()
     db.refresh(ticket)
+    notify_display_update(doctor.clinic_id, background_tasks)
     return ticket
 
 
@@ -951,6 +972,7 @@ def cancel_patient(
 def manual_check_in_patient(
     queue_id: int,
     ticket_id: int,
+    background_tasks: BackgroundTasks = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_roles(UserRole.RECEPTIONIST, UserRole.ADMIN)),
 ) -> QueueTicket:
@@ -1014,6 +1036,7 @@ def manual_check_in_patient(
     ticket.check_in_method = CheckInMethod.RECEPTION
     db.commit()
     db.refresh(ticket)
+    notify_display_update(doctor.clinic_id, background_tasks)
     return ticket
 
 
@@ -1024,6 +1047,7 @@ def manual_check_in_patient(
 def miss_turn_patient(
     queue_id: int,
     ticket_id: int,
+    background_tasks: BackgroundTasks = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_roles(UserRole.RECEPTIONIST, UserRole.ADMIN)),
 ) -> QueueTicket:
@@ -1091,6 +1115,7 @@ def miss_turn_patient(
     ticket.queue_position = next_queue_position
     db.commit()
     db.refresh(ticket)
+    notify_display_update(doctor.clinic_id, background_tasks)
     return ticket
 
 
@@ -1183,6 +1208,7 @@ def join_queue(
 def add_walk_in_patient(
     queue_id: int,
     request: WalkInPatientCreate,
+    background_tasks: BackgroundTasks = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_roles(UserRole.RECEPTIONIST, UserRole.ADMIN)),
 ) -> QueueTicket:
@@ -1257,4 +1283,5 @@ def add_walk_in_patient(
     db.add(ticket)
     db.commit()
     db.refresh(ticket)
+    notify_display_update(doctor.clinic_id, background_tasks)
     return ticket
