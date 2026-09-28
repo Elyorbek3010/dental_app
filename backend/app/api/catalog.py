@@ -1,6 +1,6 @@
 from datetime import date
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -26,7 +26,7 @@ router = APIRouter(
 def get_specializations(
     clinic_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles(UserRole.PATIENT)),
+    current_user: User = Depends(require_roles(UserRole.PATIENT, UserRole.RECEPTIONIST, UserRole.ADMIN)),
     lang: str = Depends(get_language),
 ) -> list[SpecializationResponse]:
     clinic = db.scalar(select(Clinic).where(Clinic.id == clinic_id))
@@ -64,9 +64,9 @@ def get_specializations(
 )
 def get_doctors(
     clinic_id: int,
-    specialization_id: int,
+    specialization_id: int | None = Query(default=None),
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles(UserRole.PATIENT)),
+    current_user: User = Depends(require_roles(UserRole.PATIENT, UserRole.RECEPTIONIST, UserRole.ADMIN)),
 ) -> list[Doctor]:
     clinic = db.scalar(select(Clinic).where(Clinic.id == clinic_id))
     if not clinic:
@@ -75,29 +75,30 @@ def get_doctors(
             detail="Clinic not found",
         )
 
-    specialization = db.scalar(
-        select(Specialization).where(Specialization.id == specialization_id)
+    query = select(Doctor).where(
+        Doctor.clinic_id == clinic_id,
+        Doctor.is_active == True,
     )
-    if not specialization:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Specialization not found",
-        )
 
-    if specialization.clinic_id != clinic_id:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Specialization does not belong to this clinic",
+    if specialization_id is not None:
+        specialization = db.scalar(
+            select(Specialization).where(Specialization.id == specialization_id)
         )
+        if not specialization:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Specialization not found",
+            )
+
+        if specialization.clinic_id != clinic_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Specialization does not belong to this clinic",
+            )
+        query = query.where(Doctor.specialization_id == specialization_id)
 
     doctors = db.scalars(
-        select(Doctor)
-        .where(
-            Doctor.clinic_id == clinic_id,
-            Doctor.specialization_id == specialization_id,
-            Doctor.is_active == True,
-        )
-        .order_by(Doctor.full_name.asc())
+        query.order_by(Doctor.full_name.asc())
     ).all()
 
     return list(doctors)
@@ -110,7 +111,7 @@ def get_doctors(
 def get_doctor_queue(
     doctor_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles(UserRole.PATIENT)),
+    current_user: User = Depends(require_roles(UserRole.PATIENT, UserRole.RECEPTIONIST, UserRole.ADMIN)),
 ) -> Queue:
     doctor = db.scalar(select(Doctor).where(Doctor.id == doctor_id))
     if not doctor:
