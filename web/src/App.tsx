@@ -9,6 +9,13 @@ import { TodayQueuesPage } from './pages/TodayQueuesPage';
 import { QueueManagementPage } from './pages/QueueManagementPage';
 import { PublicDisplayPage } from './pages/PublicDisplayPage';
 
+import { AdminLayout } from './components/layout/AdminLayout';
+import { AdminOverviewPage } from './pages/admin/AdminOverviewPage';
+import { AdminSpecializationsPage } from './pages/admin/AdminSpecializationsPage';
+import { AdminDoctorsPage } from './pages/admin/AdminDoctorsPage';
+import { AdminReceptionistsPage } from './pages/admin/AdminReceptionistsPage';
+import { AdminAnalyticsPage } from './pages/admin/AdminAnalyticsPage';
+
 function App() {
   return (
     <I18nProvider>
@@ -18,14 +25,14 @@ function App() {
             {/* Public TV display */}
             <Route path="/display/:clinicId" element={<PublicDisplayPage />} />
 
-            {/* Reception Login */}
+            {/* Reception / Staff Login */}
             <Route path="/login" element={<LoginPage />} />
 
             {/* Protected Reception Dashboard */}
             <Route
               path="/reception"
               element={
-                <ProtectedRoute>
+                <ProtectedRoute allowedRoles={['RECEPTIONIST', 'ADMIN']}>
                   <ReceptionApp />
                 </ProtectedRoute>
               }
@@ -33,6 +40,22 @@ function App() {
               <Route index element={<DashboardOverviewPage />} />
               <Route path="queues" element={<TodayQueuesPage />} />
               <Route path="manage" element={<QueueManagementPage />} />
+            </Route>
+
+            {/* Protected Admin Dashboard */}
+            <Route
+              path="/admin"
+              element={
+                <ProtectedRoute allowedRoles={['ADMIN']}>
+                  <AdminLayout />
+                </ProtectedRoute>
+              }
+            >
+              <Route index element={<AdminOverviewPage />} />
+              <Route path="specializations" element={<AdminSpecializationsPage />} />
+              <Route path="doctors" element={<AdminDoctorsPage />} />
+              <Route path="receptionists" element={<AdminReceptionistsPage />} />
+              <Route path="analytics" element={<AdminAnalyticsPage />} />
             </Route>
 
             {/* Fallback route */}

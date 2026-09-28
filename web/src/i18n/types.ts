@@ -156,4 +156,110 @@ export interface TranslationDictionary {
   errorTicketNotFound: string;
   errorQueueNotFound: string;
   errorGeneric: string;
+
+  // Admin Navigation & Common
+  adminPortal: string;
+  adminNavDashboard: string;
+  adminNavSpecializations: string;
+  adminNavDoctors: string;
+  adminNavReceptionists: string;
+  adminNavAnalytics: string;
+  adminClinicSettings: string;
+  adminClinicName: string;
+  adminClinicUpdateSuccess: string;
+  adminEditClinic: string;
+  adminSave: string;
+  adminSaving: string;
+  adminSearch: string;
+  adminFilterAll: string;
+
+  // Admin Specializations
+  adminSpecializationsTitle: string;
+  adminSpecializationsSubtitle: string;
+  adminAddSpecialization: string;
+  adminEditSpecialization: string;
+  adminSpecNameUz: string;
+  adminSpecNameRu: string;
+  adminSpecNameEn: string;
+  adminSpecNameUzReq: string;
+  adminSpecStatus: string;
+  adminSpecActive: string;
+  adminSpecInactive: string;
+  adminSpecActivate: string;
+  adminSpecDeactivate: string;
+  adminSpecDeactivateConfirmTitle: string;
+  adminSpecDeactivateConfirmMsg: string;
+  adminSpecActivateConfirmTitle: string;
+  adminSpecActivateConfirmMsg: string;
+  adminSpecSaveSuccess: string;
+  adminSpecEmpty: string;
+
+  // Admin Doctors
+  adminDoctorsTitle: string;
+  adminDoctorsSubtitle: string;
+  adminAddDoctor: string;
+  adminEditDoctor: string;
+  adminDoctorFullName: string;
+  adminDoctorFullNameReq: string;
+  adminDoctorSpecSelect: string;
+  adminDoctorSpecReq: string;
+  adminDoctorRoom: string;
+  adminDoctorStatus: string;
+  adminDoctorActive: string;
+  adminDoctorInactive: string;
+  adminDoctorActivate: string;
+  adminDoctorDeactivate: string;
+  adminDoctorDeactivateConfirmTitle: string;
+  adminDoctorDeactivateConfirmMsg: string;
+  adminDoctorActivateConfirmTitle: string;
+  adminDoctorActivateConfirmMsg: string;
+  adminDoctorSaveSuccess: string;
+  adminDoctorEmpty: string;
+
+  // Admin Receptionists
+  adminReceptionistsTitle: string;
+  adminReceptionistsSubtitle: string;
+  adminAddReceptionist: string;
+  adminEditReceptionist: string;
+  adminReceptionistName: string;
+  adminReceptionistNameReq: string;
+  adminReceptionistPhone: string;
+  adminReceptionistPhoneReq: string;
+  adminReceptionistPassword: string;
+  adminReceptionistPasswordReq: string;
+  adminReceptionistPasswordHint: string;
+  adminReceptionistResetPassword: string;
+  adminReceptionistStatus: string;
+  adminReceptionistActive: string;
+  adminReceptionistInactive: string;
+  adminReceptionistActivate: string;
+  adminReceptionistDeactivate: string;
+  adminReceptionistDeactivateConfirmTitle: string;
+  adminReceptionistDeactivateConfirmMsg: string;
+  adminReceptionistActivateConfirmTitle: string;
+  adminReceptionistActivateConfirmMsg: string;
+  adminReceptionistSaveSuccess: string;
+  adminReceptionistEmpty: string;
+  adminReceptionistPhoneExists: string;
+
+  // Admin Analytics & Overview
+  adminOverviewTitle: string;
+  adminOverviewSubtitle: string;
+  adminAnalyticsTitle: string;
+  adminAnalyticsSubtitle: string;
+  adminKpiActiveDoctors: string;
+  adminKpiActiveSpecializations: string;
+  adminKpiActiveReceptionists: string;
+  adminKpiTodayQueues: string;
+  adminKpiTotalTickets: string;
+  adminKpiWaiting: string;
+  adminKpiCalled: string;
+  adminKpiServing: string;
+  adminKpiCompleted: string;
+  adminKpiSkipped: string;
+  adminKpiCancelled: string;
+  adminTodayDoctorQueues: string;
+  adminDoctorQueueStatusOpen: string;
+  adminDoctorQueueStatusClosed: string;
+  adminNoQueuesToday: string;
 }

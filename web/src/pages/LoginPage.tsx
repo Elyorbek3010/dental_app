@@ -7,7 +7,7 @@ import type { Language } from '../i18n/types';
 import { AlertBanner } from '../components/common/AlertBanner';
 
 export const LoginPage: React.FC = () => {
-  const { login, isAuthenticated, authError, clearAuthError } = useAuth();
+  const { user, login, isAuthenticated, authError, clearAuthError } = useAuth();
   const { language, setLanguage, t } = useI18n();
   const navigate = useNavigate();
 
@@ -16,7 +16,10 @@ export const LoginPage: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  if (isAuthenticated) {
+  if (isAuthenticated && user) {
+    if (user.role === 'ADMIN') {
+      return <Navigate to="/admin" replace />;
+    }
     return <Navigate to="/reception" replace />;
   }
 
@@ -33,8 +36,12 @@ export const LoginPage: React.FC = () => {
 
     setIsSubmitting(true);
     try {
-      await login(trimmedPhone, password);
-      navigate('/reception', { replace: true });
+      const loggedInUser = await login(trimmedPhone, password);
+      if (loggedInUser.role === 'ADMIN') {
+        navigate('/admin', { replace: true });
+      } else {
+        navigate('/reception', { replace: true });
+      }
     } catch (err: unknown) {
       if (err instanceof Error) {
         if (err.message === 'PATIENT_DENIED') {

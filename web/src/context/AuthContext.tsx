@@ -61,6 +61,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         throw new Error('PATIENT_DENIED');
       }
       setUser(loggedInUser);
+      return loggedInUser;
     } catch (err: unknown) {
       if (err instanceof Error && err.message === 'PATIENT_DENIED') {
         throw err;

@@ -5,7 +5,7 @@ export interface AuthContextValue {
   user: User | null;
   isAuthenticated: boolean;
   isLoading: boolean;
-  login: (phone: string, password: string) => Promise<void>;
+  login: (phone: string, password: string) => Promise<User>;
   logout: () => void;
   authError: string | null;
   clearAuthError: () => void;

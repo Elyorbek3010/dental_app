@@ -1,6 +1,6 @@
 from typing import Any
 
-from sqlalchemy import ForeignKey, String
+from sqlalchemy import Boolean, ForeignKey, String, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -29,6 +29,13 @@ class Specialization(Base):
     name_en: Mapped[str | None] = mapped_column(
         String(100),
         nullable=True,
+    )
+
+    is_active: Mapped[bool] = mapped_column(
+        Boolean,
+        default=True,
+        nullable=False,
+        server_default=text("true"),
     )
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:

@@ -44,7 +44,10 @@ def get_specializations(
 
     specializations = db.scalars(
         select(Specialization)
-        .where(Specialization.clinic_id == clinic_id)
+        .where(
+            Specialization.clinic_id == clinic_id,
+            Specialization.is_active == True,
+        )
         .order_by(order_col.asc())
     ).all()
 
