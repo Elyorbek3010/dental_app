@@ -7,7 +7,7 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
-    CHECK_IN_QR_EXPIRE_MINUTES: int = 2
+    CHECK_IN_QR_EXPIRE_MINUTES: int = 180  # 3 hours
     FIREBASE_CREDENTIALS_PATH: str | None = "secrets/firebase-service-account.json"
 
     model_config = SettingsConfigDict(

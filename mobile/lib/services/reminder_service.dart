@@ -39,11 +39,11 @@ class ReminderService {
 
   /// Formats notification body according to product specifications:
   /// Uses patient note if non-empty, otherwise falls back to default body.
-  static String formatNotificationBody(String? note) {
+  static String formatNotificationBody(String? note, [String? fallbackBody]) {
     if (note != null && note.trim().isNotEmpty) {
       return note.trim();
     }
-    return defaultNotificationBody;
+    return fallbackBody ?? defaultNotificationBody;
   }
 
   /// Retrieves all reminders from local storage, sorted chronologically by [scheduledAt].
@@ -97,6 +97,7 @@ class ReminderService {
   Future<Reminder> createReminder({
     required DateTime scheduledAt,
     String? note,
+    String? defaultBody,
   }) async {
     final now = DateTime.now();
     if (scheduledAt.isBefore(now)) {
@@ -119,7 +120,7 @@ class ReminderService {
     await _saveReminders(existing);
 
     // Schedule notification
-    final body = formatNotificationBody(trimmedNote);
+    final body = formatNotificationBody(trimmedNote, defaultBody);
     await _notificationService.scheduleNotification(
       id: reminder.id,
       title: notificationTitle,
@@ -140,6 +141,7 @@ class ReminderService {
     required int id,
     required DateTime scheduledAt,
     String? note,
+    String? defaultBody,
   }) async {
     final now = DateTime.now();
     if (scheduledAt.isBefore(now)) {
@@ -169,7 +171,7 @@ class ReminderService {
     await _saveReminders(existing);
 
     // 3. Schedule updated notification
-    final body = formatNotificationBody(trimmedNote);
+    final body = formatNotificationBody(trimmedNote, defaultBody);
     await _notificationService.scheduleNotification(
       id: updated.id,
       title: notificationTitle,

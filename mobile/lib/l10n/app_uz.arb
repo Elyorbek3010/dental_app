@@ -1,0 +1,266 @@
+{
+  "@@locale": "uz",
+  "appTitle": "Dental Queue",
+  "appSubtitle": "Bemorlar uchun navbat tizimi",
+  "checkingSession": "Xavfsiz sessiya tekshirilmoqda...",
+  "backTooltip": "Ortga",
+  "refreshTooltip": "Yangilash",
+  "retryButton": "Qayta urinish",
+  "cancelButton": "Bekor qilish",
+  "saveButton": "Saqlash",
+  "updateButton": "Yangilash",
+  "deleteButton": "O‘chirish",
+  "editButton": "Tahrirlash",
+  "viewButton": "Ko‘rish",
+  "closeButton": "Yopish",
+  "loadingText": "Yuklanmoqda...",
+
+  "loginTitle": "Kirish",
+  "loginButton": "Kirish",
+  "noAccount": "Hisobingiz yo‘qmi? ",
+  "registerLink": "Ro‘yxatdan o‘tish",
+  "phoneLabel": "Telefon raqam",
+  "phoneHint": "+998901234567",
+  "phoneRequired": "Telefon raqamni kiriting",
+  "passwordLabel": "Parol",
+  "passwordHint": "Parolingizni kiriting",
+  "passwordRequired": "Parolni kiriting",
+
+  "registerTitle": "Ro‘yxatdan o‘tish",
+  "registerHeading": "Bemor hisobini yaratish",
+  "registerSubtitle": "Klinika navbat tizimidan to‘liq foydalanish uchun maʼlumotlaringizni kiriting.",
+  "fullNameLabel": "Ism va familiya",
+  "fullNameHint": "Masalan: Ali Valiyev",
+  "fullNameRequired": "Ism va familiyangizni kiriting",
+  "passwordLabelWithMin": "Parol (kamida 8 ta belgi)",
+  "newPasswordHint": "Yangi parol kiriting",
+  "passwordMinLengthHelper": "Parol uzunligi kamida 8 ta belgi bo‘lishi shart",
+  "passwordMinLengthError": "Parol kamida 8 ta belgidan iborat bo‘lishi kerak",
+  "registerButton": "Ro‘yxatdan o‘tish",
+  "haveAccount": "Hisobingiz bormi? ",
+  "loginLink": "Kirish",
+
+  "navHome": "Asosiy",
+  "navMyQueue": "Navbatim",
+  "navReminders": "Eslatmalar",
+  "navProfile": "Profil",
+
+  "greeting": "Assalomu alaykum!",
+  "homeGreetingSubtitle": "Stomatolog qabuliga tez va oson navbat oling.",
+  "homeJoinQueueButton": "Navbatga yozilish",
+  "homeCurrentQueueSection": "Joriy navbat holati",
+  "homeNoActiveQueueTitle": "Faol navbatingiz yo‘q",
+  "homeNoActiveQueueDesc": "Hozirda sizda hech qanday faol navbat mavjud emas. Qabulga yozilish uchun tugmani bosing.",
+  "homeRemindersSection": "Shaxsiy eslatmalar",
+  "homeRemindersCardTitle": "Tashrif eslatmalari",
+  "homeRemindersCardDesc": "Stomatolog tekshiruvlarini unutmang",
+
+  "myQueueTitle": "Mening navbatim",
+  "myQueueNoActiveTitle": "Faol navbatingiz yo‘q",
+  "myQueueNoActiveDesc": "Siz hozirda hech qanday shifokor navbatida emassiz. Navbat olish uchun quyidagi tugmani bosing.",
+  "ticketNumberLabel": "Talon raqami",
+  "doctorLabel": "Shifokor",
+  "specializationLabel": "Mutaxassislik",
+  "roomLabel": "Xona",
+  "roomWithNumber": "Xona: {room}",
+  "@roomWithNumber": {
+    "placeholders": {
+      "room": {
+        "type": "String"
+      }
+    }
+  },
+  "queuePositionLabel": "Tartib raqami",
+  "ticketTimeLabel": "Olingan vaqti",
+  "checkedInStatusTitle": "Klinikada ro‘yxatdan o‘tilgan",
+  "notCheckedInStatusTitle": "Klinikada ro‘yxatdan o‘tilmagan",
+  "checkedInStatusDesc": "Siz qabulxonada muvaffaqiyatli qayd etilgansiz. Iltimos, navbatingizni kuting.",
+  "notCheckedInStatusDesc": "Klinikaga yetib kelganingizda, qabulxonada yoki QR-kod orqali kelganingizni tasdiqlang.",
+  "myQueueReminderTitle": "Eslatma",
+  "myQueueReminderDesc": "Navbatingiz kelganda telefoningizga bildirishnoma (push) yuboriladi. Sahifani pastga tortib istalgan paytda yangilashingiz mumkin.",
+  "featuresTitle": "Navbat imkoniyatlari:",
+  "featureTicketAndSpec": "Talon raqami va shifokor mutaxassisligi",
+  "featureLiveQueue": "Jonli navbat tartibi va oldingizdagi odamlar soni",
+  "featureCheckIn": "Klinikaga kelganda QR yoki qabulxonada check-in qilish",
+  "featurePushNotifications": "Navbatingiz kelganda darhol push-xabarnoma olish",
+
+  "peopleAhead": "{count, plural, =0{Oldingizda hech kim yo‘q} other{Oldingizda {count} kishi bor}}",
+  "@peopleAhead": {
+    "description": "Number of people ahead in the queue",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "3"
+      }
+    }
+  },
+
+  "statusWaiting": "Kutilmoqda",
+  "statusCalled": "Navbatingiz keldi",
+  "statusServing": "Qabul davom etmoqda",
+  "statusCompleted": "Yakunlandi",
+  "statusSkipped": "O‘tkazib yuborildi",
+  "statusCancelled": "Bekor qilingan",
+
+  "profileTitle": "Profil",
+  "patientDefaultName": "Bemor hisobi",
+  "activeAccountBadge": "Faol hisob",
+  "inactiveAccountBadge": "Nofaol",
+  "accountNotLoadedBadge": "Hisob maʼlumotlari yuklanmagan",
+  "phoneProfileLabel": "Telefon raqam",
+  "notAssigned": "Biriktirilmagan",
+  "userRoleProfileLabel": "Foydalanuvchi roli",
+  "patientRoleValue": "Bemor ({role})",
+  "@patientRoleValue": {
+    "placeholders": {
+      "role": {
+        "type": "String"
+      }
+    }
+  },
+  "patientRoleFallback": "Bemor (Patient)",
+  "pushNotificationsProfileLabel": "Push-bildirishnomalar",
+  "pushNotificationsActiveValue": "Faol (FCM)",
+  "systemProfileLabel": "Tizim",
+  "appVersionProfileLabel": "Ilova versiyasi",
+  "languageSectionTitle": "Ilova tili",
+  "languageUzbek": "O‘zbekcha",
+  "languageRussian": "Русский",
+  "languageEnglish": "English",
+  "logoutButton": "Tizimdan chiqish",
+  "logoutDialogTitle": "Tizimdan chiqish",
+  "logoutDialogContent": "Haqiqatan ham hisobingizdan chiqmoqchimisiz?",
+  "authNextStep": "Autentifikatsiya keyingi bosqichda ulanadi.",
+
+  "remindersTitle": "Eslatmalarim",
+  "newReminderTooltip": "Yangi eslatma",
+  "addReminderButton": "Eslatma qo‘shish",
+  "noRemindersTitle": "Hozircha eslatmalar yo‘q",
+  "noRemindersDesc": "Stomatolog ko‘rigi yoki tashrifingizni unutmang.\nO‘zingiz uchun qulay sana va vaqtga eslatma o‘rnating.",
+  "editReminderModalTitle": "Eslatmani tahrirlash",
+  "addReminderModalTitle": "Yangi eslatma qo‘shish",
+  "reminderDateLabel": "Sana",
+  "reminderTimeLabel": "Vaqt",
+  "reminderNoteLabel": "Qisqa eslatma (ixtiyoriy)",
+  "reminderNoteHint": "Masalan: Tish tekshiruvi",
+  "reminderFutureError": "Eslatma vaqti kelajakda bo‘lishi kerak.",
+  "reminderUpdatedSuccess": "Eslatma muvaffaqiyatli yangilandi.",
+  "reminderCreatedSuccess": "Yangi eslatma saqlandi va rejalashtirildi.",
+  "deleteReminderDialogTitle": "Eslatmani o‘chirish",
+  "deleteReminderDialogContent": "Haqiqatan ham ushbu eslatmani o‘chirmoqchimisiz?",
+  "reminderDeletedSuccess": "Eslatma o‘chirildi.",
+  "reminderPastBadge": "O‘tgan",
+  "reminderWaitingBadge": "Kutilmoqda",
+  "defaultReminderNotificationBody": "Stomatolog tashrifingiz uchun eslatma.",
+
+  "selectSpecializationTitle": "Mutaxassislikni tanlash",
+  "noSpecializationsTitle": "Mutaxassisliklar topilmadi",
+  "noSpecializationsDesc": "Hozirda klinikada faol mutaxassisliklar mavjud emas. Iltimos, keyinroq qayta tekshirib ko‘ring.",
+
+  "selectDoctorTitle": "Shifokorni tanlash",
+  "noDoctorsTitle": "Shifokorlar topilmadi",
+  "noDoctorsDesc": "{specializationName} mutaxassisligi bo‘yicha hozirda faol shifokorlar mavjud emas.",
+  "@noDoctorsDesc": {
+    "placeholders": {
+      "specializationName": {
+        "type": "String"
+      }
+    }
+  },
+  "specializationHeaderPrefix": "Mutaxassislik: {specializationName}",
+  "@specializationHeaderPrefix": {
+    "placeholders": {
+      "specializationName": {
+        "type": "String"
+      }
+    }
+  },
+  "roomNumberDoctorFormat": "{room}-xona",
+  "@roomNumberDoctorFormat": {
+    "placeholders": {
+      "room": {
+        "type": "String"
+      }
+    }
+  },
+
+  "doctorQueueTitle": "Navbat maʼlumotlari",
+  "noQueueTodayTitle": "Bugun navbat mavjud emas",
+  "noQueueTodayDesc": "Bugun {doctorName} uchun navbat ochilmagan. Iltimos, boshqa shifokorni tanlang yoki keyinroq tekshirib ko‘ring.",
+  "@noQueueTodayDesc": {
+    "placeholders": {
+      "doctorName": {
+        "type": "String"
+      }
+    }
+  },
+  "todayQueueHeader": "Bugungi navbat holati",
+  "queueStatusPaused": "Pauza",
+  "queueStatusActive": "Faol",
+  "queueDateLabel": "Sana",
+  "admissionStatusLabel": "Qabul holati",
+  "admissionStatusPaused": "Vaqtincha to‘xtatilgan",
+  "admissionStatusServing": "Bemorlar qabul qilinmoqda",
+  "joinQueueButton": "Navbatga qo‘shilish",
+  "queuePausedSnackbar": "Navbat vaqtincha to‘xtatilgan.",
+  "queueInactiveSnackbar": "Navbat hozirda faol emas.",
+  "ticketJoinedSuccess": "Navbatga muvaffaqiyatli yozildingiz! Talon: №{ticketNumber}",
+  "@ticketJoinedSuccess": {
+    "placeholders": {
+      "ticketNumber": {
+        "type": "int"
+      }
+    }
+  },
+  "conflictActiveTicketTitle": "Faol navbat mavjud",
+  "conflictCannotJoinTitle": "Navbatga qo‘shilib bo‘lmadi",
+  "goToMyTicketButton": "Navbatimga o‘tish",
+
+  "errorOccurred": "Xatolik yuz berdi",
+  "networkUnavailable": "Serverga ulanib bo‘lmadi. Internet aloqasini tekshiring.",
+  "sessionExpired": "Autentifikatsiya muddati tugagan. Iltimos, qaytadan kiring.",
+  "queueUnavailable": "Navbat topilmadi.",
+  "alreadyJoinedError": "Sizda allaqachon ushbu navbatda faol talon mavjud.",
+  "loginInvalidCredentials": "Telefon raqam yoki parol noto‘g‘ri.",
+  "loginAccountInactive": "Foydalanuvchi hisobi faol emas.",
+  "loginPatientOnly": "Ushbu ilova faqat bemorlar uchun mo‘ljallangan.",
+  "registerPhoneExists": "Ushbu telefon raqam allaqachon ro‘yxatdan o‘tgan.",
+  "doctorInactive": "Shifokor hozirda nofaol holatda.",
+  "unexpectedError": "Kutilmagan xatolik yuz berdi: {error}",
+  "@unexpectedError": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "scanQrTitle": "QR-kodni skanerlash",
+  "scanQrInstructions": "Klinika qabulxonasidagi QR-kodni kameraga qarating",
+  "cameraPermissionRequired": "QR-kodni skanerlash uchun kamera ruxsati zarur.",
+  "cameraPermissionGrant": "Ruxsat berish",
+  "checkInButtonText": "QR orqali ro‘yxatdan o‘tish",
+  "checkingInLoading": "Ro‘yxatdan o‘tkazilmoqda...",
+  "checkInSuccessSnackbar": "Ro‘yxatdan muvaffaqiyatli o‘tdingiz! Navbatingiz kutish ro‘yxatida tasdiqlandi.",
+  "checkInFailedTitle": "Ro‘yxatdan o‘tib bo‘lmadi",
+  "cancelTicketButton": "Talonni bekor qilish",
+  "cancelConfirmTitle": "Talonni bekor qilasizmi?",
+  "cancelConfirmMessage": "Haqiqatan ham navbat talonini bekor qilmoqchimisiz? Ushbu amalni ortga qaytarib bo‘lmaydi.",
+  "cancelConfirmYes": "Ha, bekor qilish",
+  "cancelConfirmNo": "Yo‘q, qolsin",
+  "cancellingTicketLoading": "Talon bekor qilinmoqda...",
+  "cancelSuccessSnackbar": "Talon muvaffaqiyatli bekor qilindi.",
+  "calledBannerTitle": "Navbatingiz keldi",
+  "calledBannerSubtitle": "Iltimos, ko‘rsatilgan xonaga kiring",
+  "servingBannerTitle": "Qabul davom etmoqda",
+  "servingBannerSubtitle": "Shifokor ko‘rigi davom etmoqda",
+  "waitingCheckInPrompt": "Klinikaga yetib kelganingizda, qabulxona QR-kodini skanerlang",
+  "enterCodeManually": "Kodni qo‘lda kiritish",
+  "qrCodeInputHint": "QR tokenini kiriting",
+  "submitButton": "Yuborish",
+  "closeButton": "Yopish",
+  "errorInvalidQrCode": "Yaroqsiz yoki muddati o‘tgan QR-kod.",
+  "errorNoWaitingTicketForClinic": "Ushbu klinika uchun kutilayotgan faol navbat taloni topilmadi.",
+  "errorTicketAlreadyCheckedIn": "Ushbu navbat taloni allaqachon ro‘yxatdan o‘tkazilgan.",
+  "errorCannotCancelOtherTicket": "Boshqa bemorning navbat talonini bekor qilish taqiqlanadi.",
+  "errorOnlyWaitingCalledCancellable": "Faqat kutilayotgan yoki chaqirilgan talonlar bekor qilinishi mumkin."
+}

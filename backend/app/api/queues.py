@@ -3,9 +3,10 @@ from datetime import date, datetime, timezone
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 from jose import JWTError
 from sqlalchemy import case, func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_db, require_roles
+from app.api.deps import get_db, get_language, require_roles
 from app.core.config import settings
 from app.core.security import create_check_in_qr_token, decode_check_in_qr_token
 from app.models.clinic import Clinic
@@ -31,6 +32,7 @@ from app.schemas.queue import (
     MyTicketDoctorResponse,
     MyTicketSpecializationResponse,
     PatientQRCheckInRequest,
+    QueueCreateRequest,
     QueueResponse,
     QueueStatusResponse,
     QueueTicketResponse,
@@ -53,6 +55,7 @@ router = APIRouter(
 def get_my_ticket(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_roles(UserRole.PATIENT)),
+    lang: str = Depends(get_language),
 ) -> MyQueueTicketResponse:
     result = db.execute(
         select(QueueTicket, Doctor, Specialization)
@@ -99,6 +102,8 @@ def get_my_ticket(
         ticket_number=ticket.ticket_number,
         status=ticket.status,
         created_at=ticket.created_at,
+        checked_in_at=ticket.checked_in_at,
+        check_in_method=ticket.check_in_method,
         people_ahead=people_ahead,
         doctor=MyTicketDoctorResponse(
             id=doctor.id,
@@ -107,9 +112,149 @@ def get_my_ticket(
         ),
         specialization=MyTicketSpecializationResponse(
             id=specialization.id,
-            name=specialization.name,
+            name=specialization.get_localized_name(lang),
         ),
     )
+
+
+@router.patch(
+    "/my-ticket/cancel",
+    response_model=QueueTicketResponse,
+)
+def cancel_my_ticket(
+    background_tasks: BackgroundTasks = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles(UserRole.PATIENT)),
+) -> QueueTicket:
+    ticket = db.scalar(
+        select(QueueTicket)
+        .where(
+            QueueTicket.patient_id == current_user.id,
+            QueueTicket.status.in_([
+                TicketStatus.WAITING,
+                TicketStatus.CALLED,
+                TicketStatus.SKIPPED,
+            ]),
+        )
+        .order_by(QueueTicket.created_at.desc())
+    )
+
+    if not ticket:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No active ticket found to cancel",
+        )
+
+    queue = db.scalar(select(Queue).where(Queue.id == ticket.queue_id))
+    doctor = db.scalar(select(Doctor).where(Doctor.id == queue.doctor_id)) if queue else None
+
+    ticket.status = TicketStatus.CANCELLED
+    db.commit()
+    db.refresh(ticket)
+
+    if doctor:
+        notify_display_update(doctor.clinic_id, background_tasks)
+    if queue:
+        schedule_approaching_check(queue.id, background_tasks)
+
+    return ticket
+
+
+@router.post(
+    "",
+    response_model=QueueResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Create or open today's queue for a doctor",
+)
+@router.post(
+    "/open",
+    response_model=QueueResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Open today's queue for a doctor (alias)",
+)
+def open_today_queue(
+    request: QueueCreateRequest,
+    background_tasks: BackgroundTasks = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles(UserRole.RECEPTIONIST, UserRole.ADMIN)),
+) -> Queue:
+    doctor = db.scalar(select(Doctor).where(Doctor.id == request.doctor_id))
+    if not doctor:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Doctor not found",
+        )
+
+    if current_user.role == UserRole.RECEPTIONIST:
+        if current_user.clinic_id is None:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Receptionist is not assigned to a clinic",
+            )
+        if doctor.clinic_id != current_user.clinic_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Cannot open queue for another clinic's doctor",
+            )
+
+    if not doctor.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Doctor is inactive",
+        )
+
+    target_date = request.queue_date or date.today()
+
+    existing_queue = db.scalar(
+        select(Queue).where(
+            Queue.doctor_id == doctor.id,
+            Queue.queue_date == target_date,
+        )
+    )
+
+    if existing_queue:
+        if existing_queue.is_active:
+            if request.idempotent:
+                return existing_queue
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Queue already exists for this doctor today",
+            )
+        else:
+            existing_queue.is_active = True
+            existing_queue.is_paused = False
+            db.commit()
+            db.refresh(existing_queue)
+            notify_display_update(doctor.clinic_id, background_tasks)
+            return existing_queue
+
+    new_queue = Queue(
+        doctor_id=doctor.id,
+        queue_date=target_date,
+        is_paused=False,
+        is_active=True,
+    )
+    db.add(new_queue)
+    try:
+        db.commit()
+        db.refresh(new_queue)
+    except IntegrityError:
+        db.rollback()
+        existing = db.scalar(
+            select(Queue).where(
+                Queue.doctor_id == doctor.id,
+                Queue.queue_date == target_date,
+            )
+        )
+        if existing and request.idempotent:
+            return existing
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Queue already exists for this doctor today",
+        )
+
+    notify_display_update(doctor.clinic_id, background_tasks)
+    return new_queue
 
 
 @router.get(
@@ -119,6 +264,7 @@ def get_my_ticket(
 def get_reception_today_queues(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_roles(UserRole.RECEPTIONIST, UserRole.ADMIN)),
+    lang: str = Depends(get_language),
 ) -> list[ReceptionQueueOverviewResponse]:
     if current_user.role == UserRole.RECEPTIONIST:
         if current_user.clinic_id is None:
@@ -175,7 +321,7 @@ def get_reception_today_queues(
             ),
             specialization=ReceptionQueueSpecializationResponse(
                 id=specialization.id,
-                name=specialization.name,
+                name=specialization.get_localized_name(lang),
             ),
             waiting_count=waiting_count,
             called_count=called_count,
@@ -943,7 +1089,7 @@ def cancel_patient(
     ticket_id: int,
     background_tasks: BackgroundTasks = None,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles(UserRole.RECEPTIONIST, UserRole.ADMIN)),
+    current_user: User = Depends(require_roles(UserRole.RECEPTIONIST, UserRole.ADMIN, UserRole.PATIENT)),
 ) -> QueueTicket:
     queue = db.scalar(select(Queue).where(Queue.id == queue_id))
     if not queue:
@@ -982,6 +1128,13 @@ def cancel_patient(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Ticket not found in this queue",
         )
+
+    if current_user.role == UserRole.PATIENT:
+        if ticket.patient_id != current_user.id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Cannot cancel another patient's ticket",
+            )
 
     if ticket.status not in (TicketStatus.WAITING, TicketStatus.CALLED, TicketStatus.SKIPPED):
         raise HTTPException(

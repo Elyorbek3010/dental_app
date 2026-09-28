@@ -1,10 +1,10 @@
 from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_db, require_roles
+from app.api.deps import get_db, get_language, require_roles
 from app.models.clinic import Clinic
 from app.models.doctor import Doctor
 from app.models.queue import Queue
@@ -27,7 +27,8 @@ def get_specializations(
     clinic_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_roles(UserRole.PATIENT)),
-) -> list[Specialization]:
+    lang: str = Depends(get_language),
+) -> list[SpecializationResponse]:
     clinic = db.scalar(select(Clinic).where(Clinic.id == clinic_id))
     if not clinic:
         raise HTTPException(
@@ -35,13 +36,26 @@ def get_specializations(
             detail="Clinic not found",
         )
 
+    order_col = Specialization.name_uz
+    if lang == "ru":
+        order_col = func.coalesce(Specialization.name_ru, Specialization.name_uz)
+    elif lang == "en":
+        order_col = func.coalesce(Specialization.name_en, Specialization.name_uz)
+
     specializations = db.scalars(
         select(Specialization)
         .where(Specialization.clinic_id == clinic_id)
-        .order_by(Specialization.name.asc())
+        .order_by(order_col.asc())
     ).all()
 
-    return list(specializations)
+    return [
+        SpecializationResponse(
+            id=s.id,
+            clinic_id=s.clinic_id,
+            name=s.get_localized_name(lang),
+        )
+        for s in specializations
+    ]
 
 
 @router.get(

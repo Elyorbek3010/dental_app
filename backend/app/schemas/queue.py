@@ -10,6 +10,18 @@ class WalkInPatientCreate(BaseModel):
     patient_phone: str | None = Field(default=None, max_length=30)
 
 
+class QueueCreateRequest(BaseModel):
+    doctor_id: int = Field(..., description="ID of the doctor to open the queue for")
+    queue_date: date | None = Field(
+        default=None,
+        description="Target queue date (defaults to today)",
+    )
+    idempotent: bool = Field(
+        default=False,
+        description="If True, return existing active queue instead of 409 Conflict",
+    )
+
+
 class QueueResponse(BaseModel):
     id: int
     doctor_id: int
@@ -62,6 +74,8 @@ class MyQueueTicketResponse(BaseModel):
     people_ahead: int
     doctor: MyTicketDoctorResponse
     specialization: MyTicketSpecializationResponse
+    checked_in_at: datetime | None = None
+    check_in_method: CheckInMethod | None = None
 
     model_config = ConfigDict(from_attributes=True)
 

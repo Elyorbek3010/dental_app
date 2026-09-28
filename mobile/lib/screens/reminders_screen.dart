@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../l10n/l10n.dart';
 import '../models/reminder.dart';
 import '../services/reminder_service.dart';
 
@@ -56,6 +57,7 @@ class _RemindersScreenState extends State<RemindersScreen> {
 
   Future<void> _showReminderForm({Reminder? existing}) async {
     final isEditing = existing != null;
+    final l10n = context.l10n;
     DateTime initialDate;
     TimeOfDay initialTime;
 
@@ -99,7 +101,9 @@ class _RemindersScreenState extends State<RemindersScreen> {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Text(
-                          isEditing ? 'Eslatmani tahrirlash' : 'Yangi eslatma qo‘shish',
+                          isEditing
+                              ? l10n.editReminderModalTitle
+                              : l10n.addReminderModalTitle,
                           style: Theme.of(context).textTheme.titleLarge?.copyWith(
                                 fontWeight: FontWeight.bold,
                               ),
@@ -119,7 +123,7 @@ class _RemindersScreenState extends State<RemindersScreen> {
                         side: BorderSide(color: Colors.grey.shade300),
                       ),
                       leading: const Icon(Icons.calendar_today, color: Colors.blueAccent),
-                      title: const Text('Sana (Date)'),
+                      title: Text(l10n.reminderDateLabel),
                       subtitle: Text(
                         _formatDate(selectedDate),
                         style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
@@ -150,7 +154,7 @@ class _RemindersScreenState extends State<RemindersScreen> {
                         side: BorderSide(color: Colors.grey.shade300),
                       ),
                       leading: const Icon(Icons.access_time, color: Colors.blueAccent),
-                      title: const Text('Vaqt (Time)'),
+                      title: Text(l10n.reminderTimeLabel),
                       subtitle: Text(
                         '${selectedTime.hour.toString().padLeft(2, '0')}:${selectedTime.minute.toString().padLeft(2, '0')}',
                         style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
@@ -176,8 +180,8 @@ class _RemindersScreenState extends State<RemindersScreen> {
                       controller: noteController,
                       maxLength: 100,
                       decoration: InputDecoration(
-                        labelText: 'Qisqa eslatma (Note - ixtiyoriy)',
-                        hintText: 'Masalan: Tish tekshiruvi (Dental check-up)',
+                        labelText: l10n.reminderNoteLabel,
+                        hintText: l10n.reminderNoteHint,
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
                         ),
@@ -212,8 +216,7 @@ class _RemindersScreenState extends State<RemindersScreen> {
 
                         if (combinedDateTime.isBefore(DateTime.now())) {
                           setModalState(() {
-                            errorMessage =
-                                'Eslatma vaqti kelajakda bo‘lishi kerak (Must be in the future).';
+                            errorMessage = l10n.reminderFutureError;
                           });
                           return;
                         }
@@ -227,20 +230,22 @@ class _RemindersScreenState extends State<RemindersScreen> {
                               id: existing.id,
                               scheduledAt: combinedDateTime,
                               note: noteController.text,
+                              defaultBody: l10n.defaultReminderNotificationBody,
                             );
                             messenger.showSnackBar(
-                              const SnackBar(
-                                content: Text('Eslatma muvaffaqiyatli yangilandi.'),
+                              SnackBar(
+                                content: Text(l10n.reminderUpdatedSuccess),
                               ),
                             );
                           } else {
                             await _reminderService.createReminder(
                               scheduledAt: combinedDateTime,
                               note: noteController.text,
+                              defaultBody: l10n.defaultReminderNotificationBody,
                             );
                             messenger.showSnackBar(
-                              const SnackBar(
-                                content: Text('Yangi eslatma saqlandi va rejalashtirildi.'),
+                              SnackBar(
+                                content: Text(l10n.reminderCreatedSuccess),
                               ),
                             );
                           }
@@ -248,14 +253,14 @@ class _RemindersScreenState extends State<RemindersScreen> {
                         } catch (e) {
                           messenger.showSnackBar(
                             SnackBar(
-                              content: Text('Xatolik yuz berdi: $e'),
+                              content: Text(e.toString()),
                               backgroundColor: Colors.red,
                             ),
                           );
                         }
                       },
                       child: Text(
-                        isEditing ? 'Yangilash (Update)' : 'Saqlash (Save)',
+                        isEditing ? l10n.updateButton : l10n.saveButton,
                         style: const TextStyle(fontSize: 16),
                       ),
                     ),
@@ -270,26 +275,27 @@ class _RemindersScreenState extends State<RemindersScreen> {
   }
 
   Future<void> _deleteReminder(Reminder reminder) async {
+    final l10n = context.l10n;
     final messenger = ScaffoldMessenger.of(context);
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) {
         return AlertDialog(
-          title: const Text('Eslatmani o‘chirish'),
+          title: Text(l10n.deleteReminderDialogTitle),
           content: Text(
-            'Haqiqatan ham ushbu eslatmani o‘chirmoqchimisiz?\n\n'
-            'Sana: ${_formatDate(reminder.scheduledAt)} ${_formatTime(reminder.scheduledAt)}\n'
-            'Matn: ${reminder.note ?? ReminderService.defaultNotificationBody}',
+            '${l10n.deleteReminderDialogContent}\n\n'
+            '${l10n.reminderDateLabel}: ${_formatDate(reminder.scheduledAt)} ${_formatTime(reminder.scheduledAt)}\n'
+            '${reminder.note ?? l10n.defaultReminderNotificationBody}',
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(dialogContext, false),
-              child: const Text('Bekor qilish'),
+              child: Text(l10n.cancelButton),
             ),
             TextButton(
               onPressed: () => Navigator.pop(dialogContext, true),
               style: TextButton.styleFrom(foregroundColor: Colors.red),
-              child: const Text('O‘chirish'),
+              child: Text(l10n.deleteButton),
             ),
           ],
         );
@@ -299,7 +305,7 @@ class _RemindersScreenState extends State<RemindersScreen> {
     if (confirmed == true) {
       await _reminderService.deleteReminder(reminder.id);
       messenger.showSnackBar(
-        const SnackBar(content: Text('Eslatma o‘chirildi.')),
+        SnackBar(content: Text(l10n.reminderDeletedSuccess)),
       );
       await _loadReminders();
     }
@@ -307,13 +313,15 @@ class _RemindersScreenState extends State<RemindersScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
+
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Eslatmalarim'),
+        title: Text(l10n.remindersTitle),
         actions: [
           IconButton(
             icon: const Icon(Icons.add_alarm),
-            tooltip: 'Yangi eslatma',
+            tooltip: l10n.newReminderTooltip,
             onPressed: () => _showReminderForm(),
           ),
         ],
@@ -321,7 +329,7 @@ class _RemindersScreenState extends State<RemindersScreen> {
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : _reminders.isEmpty
-              ? _buildEmptyState()
+              ? _buildEmptyState(l10n)
               : RefreshIndicator(
                   onRefresh: _loadReminders,
                   child: ListView.builder(
@@ -329,19 +337,19 @@ class _RemindersScreenState extends State<RemindersScreen> {
                     itemCount: _reminders.length,
                     itemBuilder: (context, index) {
                       final item = _reminders[index];
-                      return _buildReminderCard(item);
+                      return _buildReminderCard(item, l10n);
                     },
                   ),
                 ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _showReminderForm(),
         icon: const Icon(Icons.add),
-        label: const Text('Eslatma qo‘shish'),
+        label: Text(l10n.addReminderButton),
       ),
     );
   }
 
-  Widget _buildEmptyState() {
+  Widget _buildEmptyState(AppLocalizations l10n) {
     return Center(
       child: SingleChildScrollView(
         padding: const EdgeInsets.all(24),
@@ -355,15 +363,14 @@ class _RemindersScreenState extends State<RemindersScreen> {
             ),
             const SizedBox(height: 16),
             Text(
-              'Hozircha eslatmalar yo‘q',
+              l10n.noRemindersTitle,
               style: Theme.of(context).textTheme.titleLarge?.copyWith(
                     fontWeight: FontWeight.bold,
                   ),
             ),
             const SizedBox(height: 8),
             Text(
-              'Stomatolog ko‘rigi yoki tashrifingizni unutmang.\n'
-              'O‘zingiz uchun qulay sana va vaqtga eslatma o‘rnating.',
+              l10n.noRemindersDesc,
               textAlign: TextAlign.center,
               style: TextStyle(color: Colors.grey.shade600, height: 1.4),
             ),
@@ -371,7 +378,7 @@ class _RemindersScreenState extends State<RemindersScreen> {
             ElevatedButton.icon(
               onPressed: () => _showReminderForm(),
               icon: const Icon(Icons.add),
-              label: const Text('Eslatma qo‘shish'),
+              label: Text(l10n.addReminderButton),
               style: ElevatedButton.styleFrom(
                 padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
               ),
@@ -382,11 +389,11 @@ class _RemindersScreenState extends State<RemindersScreen> {
     );
   }
 
-  Widget _buildReminderCard(Reminder reminder) {
+  Widget _buildReminderCard(Reminder reminder, AppLocalizations l10n) {
     final isPast = reminder.isPast;
     final dateStr = _formatDate(reminder.scheduledAt);
     final timeStr = _formatTime(reminder.scheduledAt);
-    final noteStr = reminder.note ?? ReminderService.defaultNotificationBody;
+    final noteStr = reminder.note ?? l10n.defaultReminderNotificationBody;
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
@@ -425,7 +432,7 @@ class _RemindersScreenState extends State<RemindersScreen> {
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Text(
-                    isPast ? 'O‘tgan' : 'Kutilmoqda',
+                    isPast ? l10n.reminderPastBadge : l10n.reminderWaitingBadge,
                     style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.bold,
@@ -450,13 +457,13 @@ class _RemindersScreenState extends State<RemindersScreen> {
                 TextButton.icon(
                   onPressed: () => _showReminderForm(existing: reminder),
                   icon: const Icon(Icons.edit_outlined, size: 18),
-                  label: const Text('Tahrirlash'),
+                  label: Text(l10n.editButton),
                 ),
                 const SizedBox(width: 8),
                 TextButton.icon(
                   onPressed: () => _deleteReminder(reminder),
                   icon: const Icon(Icons.delete_outline, size: 18),
-                  label: const Text('O‘chirish'),
+                  label: Text(l10n.deleteButton),
                   style: TextButton.styleFrom(foregroundColor: Colors.red),
                 ),
               ],

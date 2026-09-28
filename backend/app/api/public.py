@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisco
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_db
+from app.api.deps import get_db, get_language
 from app.db.session import SessionLocal
 from app.models.clinic import Clinic
 from app.models.doctor import Doctor
@@ -80,6 +80,7 @@ async def public_clinic_display_websocket(
 def get_public_clinic_display(
     clinic_id: int,
     db: Session = Depends(get_db),
+    lang: str = Depends(get_language),
 ) -> PublicDisplayResponse:
     clinic = db.scalar(select(Clinic).where(Clinic.id == clinic_id))
     if not clinic:
@@ -156,7 +157,7 @@ def get_public_clinic_display(
                 ),
                 specialization=PublicDisplaySpecialization(
                     id=specialization.id,
-                    name=specialization.name,
+                    name=specialization.get_localized_name(lang),
                 ),
                 is_paused=queue.is_paused,
                 called_ticket=called_by_queue.get(queue.id),

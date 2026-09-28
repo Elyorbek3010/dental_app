@@ -1,17 +1,20 @@
-# app
+# Dental App - Mobile Client (Patient Flutter App)
 
-A new Flutter project.
+This is the patient-facing mobile application for the Dental Clinic queue management system.
 
-## Getting Started
+## Features (Step 11)
+- Authentication and session restoration with secure token storage.
+- FCM device registration and push notifications.
+- Multilingual localization: Uzbek (default), Russian, English.
+- Catalog exploration: Specializations and Doctors with today's queue status.
+- Queue participation: Join Queue, My Queue screen, people ahead count.
+- In-person clinic QR check-in scanning.
+- Patient self-cancellation.
+- Local appointment reminders.
+- Manual pull-to-refresh fallback on My Queue.
 
-This project is a starting point for a Flutter application.
+## Implementation Status
 
-A few resources to get you started if this is your first Flutter project:
+- **Step 11 implementation**: COMPLETE
+- **Known deferred issue**: FCM notifications reach the physical device, but automatic My Queue state refresh from real-device FCM events is not yet reliably verified/working; manual refresh remains available. Realtime auto-refresh should NOT be described as fully working until further investigation.
 
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
-
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.

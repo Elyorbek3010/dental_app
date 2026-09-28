@@ -19,20 +19,47 @@ def seed_data() -> None:
             db.add(clinic)
             db.flush()
 
-        # 2. Specialization
-        specialization = db.scalar(
-            select(Specialization).where(
-                Specialization.clinic_id == clinic.id,
-                Specialization.name == "General Dentistry",
+        # 2. Specializations
+        specs_data = [
+            {
+                "name_uz": "Umumiy stomatologiya",
+                "name_ru": "Общая стоматология",
+                "name_en": "General Dentistry",
+            },
+            {
+                "name_uz": "Ortodontiya",
+                "name_ru": "Ортодонтия",
+                "name_en": "Orthodontics",
+            },
+            {
+                "name_uz": "Bolalar stomatologiyasi",
+                "name_ru": "Детская стоматология",
+                "name_en": "Pediatric Dentistry",
+            },
+        ]
+        specialization = None
+        for spec_info in specs_data:
+            existing = db.scalar(
+                select(Specialization).where(
+                    Specialization.clinic_id == clinic.id,
+                    Specialization.name_uz == spec_info["name_uz"],
+                )
             )
-        )
-        if not specialization:
-            specialization = Specialization(
-                clinic_id=clinic.id,
-                name="General Dentistry",
-            )
-            db.add(specialization)
-            db.flush()
+            if not existing:
+                existing = Specialization(
+                    clinic_id=clinic.id,
+                    name_uz=spec_info["name_uz"],
+                    name_ru=spec_info["name_ru"],
+                    name_en=spec_info["name_en"],
+                )
+                db.add(existing)
+                db.flush()
+            else:
+                existing.name_ru = spec_info["name_ru"]
+                existing.name_en = spec_info["name_en"]
+                db.flush()
+            if specialization is None:
+                specialization = existing
 
         # 3. Doctor
         doctor = db.scalar(
