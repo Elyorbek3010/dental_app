@@ -17,6 +17,8 @@ import 'package:app/models/specialization.dart';
 import 'package:app/screens/doctor_queue_screen.dart';
 import 'package:app/screens/login_screen.dart';
 import 'package:app/screens/profile_screen.dart';
+import 'package:app/main.dart';
+import 'package:app/screens/patient_shell.dart';
 import 'package:app/screens/register_screen.dart';
 import 'package:app/screens/reminders_screen.dart';
 import 'package:app/services/auth_controller.dart';
@@ -28,6 +30,11 @@ import 'package:app/services/push_notification_service.dart';
 import 'package:app/services/queue_service.dart';
 import 'package:app/services/reminder_service.dart';
 import 'package:app/services/secure_token_storage.dart';
+
+class FakeQueueService extends QueueService {
+  @override
+  Future<MyQueueTicket?> getMyTicket() async => null;
+}
 
 class InMemoryTokenStorage implements SecureTokenStorage {
   String? accessToken = 'mock_jwt_token';
@@ -663,5 +670,101 @@ void main() {
       expect(recordedHeaders.last, 'en');
     });
   });
+
+  group('MyApp Root Locale Switch Regression Tests', () {
+    late InMemoryTokenStorage tokenStorage;
+    late FakePushNotificationService pushService;
+    late LocaleController localeController;
+    late FakeQueueService fakeQueueService;
+
+    setUp(() async {
+      SharedPreferences.setMockInitialValues({'app_locale': 'uz'});
+      final prefs = await SharedPreferences.getInstance();
+      localeController = LocaleController(
+        preferences: prefs,
+      );
+      tokenStorage = InMemoryTokenStorage();
+      pushService = FakePushNotificationService();
+      fakeQueueService = FakeQueueService();
+      QueueService.instance = fakeQueueService;
+    });
+
+    testWidgets(
+      'Authenticated patient changing locale updates UI without getting stuck on secure session screen',
+      (tester) async {
+        final mockAuthClient = MockClient((request) async {
+          if (request.url.path == '/api/auth/me') {
+            return http.Response.bytes(
+              utf8.encode(jsonEncode({
+                'id': 1,
+                'full_name': 'Ali Valiyev',
+                'phone': '+998901234567',
+                'role': 'PATIENT',
+                'is_active': true,
+                'created_at': DateTime.now().toIso8601String(),
+              })),
+              200,
+              headers: {'content-type': 'application/json; charset=utf-8'},
+            );
+          }
+          return http.Response('Not Found', 404);
+        });
+
+        final authService = AuthService(
+          httpClient: mockAuthClient,
+          tokenStorage: tokenStorage,
+          pushService: pushService,
+        );
+
+        final authController = AuthController(authService: authService);
+
+        await tester.pumpWidget(
+          MyApp(
+            authController: authController,
+            localeController: localeController,
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        // 1. Initial State: Uzbek locale, session restored, PatientShell active
+        expect(find.byType(PatientShell), findsOneWidget);
+        expect(authController.isAuthenticated, isTrue);
+        expect(find.text('Asosiy'), findsOneWidget);
+        expect(find.text('Xavfsiz sessiya tekshirilmoqda...'), findsNothing);
+
+        // 2. Change locale to Russian (ru)
+        await localeController.setLanguageCode('ru');
+        await tester.pumpAndSettle();
+
+        // Must still render PatientShell and NOT be stuck on checkingSession loading screen!
+        expect(find.byType(PatientShell), findsOneWidget);
+        expect(find.text('Проверка защищенной сессии...'), findsNothing);
+        expect(find.text('Checking secure session...'), findsNothing);
+        expect(find.text('Xavfsiz sessiya tekshirilmoqda...'), findsNothing);
+        expect(find.text('Главная'), findsOneWidget);
+        expect(authController.isAuthenticated, isTrue);
+
+        // 3. Change locale to English (en)
+        await localeController.setLanguageCode('en');
+        await tester.pumpAndSettle();
+
+        // Must still render PatientShell in English and NOT be stuck on checkingSession
+        expect(find.byType(PatientShell), findsOneWidget);
+        expect(find.text('Home'), findsOneWidget);
+        expect(find.text('Checking secure session...'), findsNothing);
+        expect(authController.isAuthenticated, isTrue);
+
+        // 4. Change back to Uzbek (uz)
+        await localeController.setLanguageCode('uz');
+        await tester.pumpAndSettle();
+
+        expect(find.byType(PatientShell), findsOneWidget);
+        expect(find.text('Asosiy'), findsOneWidget);
+        expect(find.text('Xavfsiz sessiya tekshirilmoqda...'), findsNothing);
+        expect(authController.isAuthenticated, isTrue);
+      },
+    );
+  });
 }
+
 

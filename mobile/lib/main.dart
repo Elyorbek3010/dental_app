@@ -28,7 +28,7 @@ Future<void> main() async {
   runApp(const MyApp());
 }
 
-class MyApp extends StatelessWidget {
+class MyApp extends StatefulWidget {
   const MyApp({
     super.key,
     this.home,
@@ -42,8 +42,44 @@ class MyApp extends StatelessWidget {
   final LocaleController? localeController;
 
   @override
+  State<MyApp> createState() => _MyAppState();
+}
+
+class _MyAppState extends State<MyApp> {
+  late AuthController _authController;
+  late bool _ownsAuthController;
+
+  @override
+  void initState() {
+    super.initState();
+    _ownsAuthController = widget.authController == null;
+    _authController = widget.authController ?? AuthController();
+  }
+
+  @override
+  void didUpdateWidget(MyApp oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.authController != null &&
+        widget.authController != oldWidget.authController) {
+      if (_ownsAuthController) {
+        _authController.dispose();
+      }
+      _ownsAuthController = false;
+      _authController = widget.authController!;
+    }
+  }
+
+  @override
+  void dispose() {
+    if (_ownsAuthController) {
+      _authController.dispose();
+    }
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final controller = localeController ?? LocaleController.instance;
+    final controller = widget.localeController ?? LocaleController.instance;
 
     return ListenableBuilder(
       listenable: controller,
@@ -55,9 +91,9 @@ class MyApp extends StatelessWidget {
           locale: controller.locale,
           localizationsDelegates: AppLocalizations.localizationsDelegates,
           supportedLocales: AppLocalizations.supportedLocales,
-          home: home ??
+          home: widget.home ??
               AuthGate(
-                authController: authController ?? AuthController(),
+                authController: _authController,
               ),
         );
       },

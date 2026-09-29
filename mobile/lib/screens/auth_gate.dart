@@ -35,6 +35,15 @@ class _AuthGateState extends State<AuthGate> {
   }
 
   @override
+  void didUpdateWidget(AuthGate oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.authController != oldWidget.authController &&
+        !widget.authController.isInitialized) {
+      widget.authController.checkAuthSession();
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
       listenable: widget.authController,
