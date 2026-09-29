@@ -73,29 +73,54 @@ class ConnectionManager:
 manager = ConnectionManager()
 
 
-def notify_display_update(clinic_id: int, background_tasks: Any = None) -> None:
+def notify_display_update(
+    clinic_id: int,
+    background_tasks: Any = None,
+    queue_id: int | None = None,
+) -> None:
     """
-    Schedule a privacy-safe 'display_updated' broadcast for a clinic.
+    Schedule a privacy-safe broadcast for a clinic.
+    Sends 'display_updated' for Public Display / Reception web clients,
+    and 'queue_updated' (with queue_id) for Patient mobile/web preview clients.
     Uses FastAPI BackgroundTasks if provided; falls back to current event loop or no-op.
     Guaranteed non-blocking and safe: never raises an exception.
     """
     import asyncio
 
-    message = {
+    display_message: dict[str, Any] = {
         "type": "display_updated",
         "clinic_id": clinic_id,
     }
+    if queue_id is not None:
+        display_message["queue_id"] = queue_id
+
+    queue_message: dict[str, Any] = {
+        "type": "queue_updated",
+        "clinic_id": clinic_id,
+        "queue_id": queue_id,
+    }
+
+    async def _broadcast_both() -> None:
+        await manager.broadcast(clinic_id, display_message)
+        await manager.broadcast(clinic_id, queue_message)
 
     try:
         if background_tasks is not None and hasattr(background_tasks, "add_task"):
-            background_tasks.add_task(manager.broadcast, clinic_id, message)
+            background_tasks.add_task(_broadcast_both)
             return
 
         loop = asyncio.get_running_loop()
-        loop.create_task(manager.broadcast(clinic_id, message))
+        loop.create_task(_broadcast_both())
     except RuntimeError:
         # No active event loop in current thread (e.g. standalone synchronous tests)
         pass
     except Exception as exc:
-        logger.error("Error scheduling display update for clinic %s: %s", clinic_id, exc)
+        logger.error(
+            "Error scheduling display/queue update for clinic %s: %s",
+            clinic_id,
+            exc,
+        )
+
+
+notify_queue_update = notify_display_update
 

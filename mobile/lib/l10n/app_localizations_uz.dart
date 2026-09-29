@@ -450,6 +450,38 @@ class AppLocalizationsUz extends AppLocalizations {
   String get queueStatusActive => 'Faol';
 
   @override
+  String get queueStatusActiveBadge => 'Navbat faol';
+
+  @override
+  String get currentlyServingLabel => 'Hozir qabulda';
+
+  @override
+  String get waitingCountLabel => 'Kutayotganlar';
+
+  @override
+  String get calledCountLabel => 'Chaqirilganlar';
+
+  @override
+  String get ifYouJoinNowLabel => 'Agar hozir qo‘shilsangiz';
+
+  @override
+  String get estimatedPositionLabel => 'Taxminiy o‘rningiz';
+
+  @override
+  String estimatedPositionValue(int position) {
+    return '#$position';
+  }
+
+  @override
+  String get queueTemporarilyPaused => 'Navbat vaqtincha to‘xtatilgan';
+
+  @override
+  String get todayQueueNotOpened => 'Bugun navbat ochilmagan';
+
+  @override
+  String get queueUnavailableState => 'Navbat mavjud emas';
+
+  @override
   String get queueDateLabel => 'Sana';
 
   @override

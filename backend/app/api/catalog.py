@@ -1,17 +1,18 @@
 from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import func, select
+from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_db, get_language, require_roles
 from app.models.clinic import Clinic
 from app.models.doctor import Doctor
 from app.models.queue import Queue
+from app.models.queue_ticket import QueueTicket, TicketStatus
 from app.models.specialization import Specialization
 from app.models.user import User, UserRole
 from app.schemas.catalog import DoctorResponse, SpecializationResponse
-from app.schemas.queue import QueueResponse
+from app.schemas.queue import DoctorQueuePreviewResponse, QueueResponse
 
 router = APIRouter(
     prefix="/api/catalog",
@@ -109,13 +110,13 @@ def get_doctors(
 
 @router.get(
     "/doctors/{doctor_id}/queue",
-    response_model=QueueResponse,
+    response_model=DoctorQueuePreviewResponse,
 )
 def get_doctor_queue(
     doctor_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_roles(UserRole.PATIENT, UserRole.RECEPTIONIST, UserRole.ADMIN)),
-) -> Queue:
+) -> DoctorQueuePreviewResponse:
     doctor = db.scalar(select(Doctor).where(Doctor.id == doctor_id))
     if not doctor:
         raise HTTPException(
@@ -133,7 +134,6 @@ def get_doctor_queue(
         select(Queue).where(
             Queue.doctor_id == doctor_id,
             Queue.queue_date == date.today(),
-            Queue.is_active == True,
         )
     )
     if not queue:
@@ -142,4 +142,30 @@ def get_doctor_queue(
             detail="No active queue for this doctor today",
         )
 
-    return queue
+    counts = db.execute(
+        select(
+            func.count(
+                case((QueueTicket.status == TicketStatus.WAITING, QueueTicket.id))
+            ).label("waiting_count"),
+            func.count(
+                case((QueueTicket.status == TicketStatus.CALLED, QueueTicket.id))
+            ).label("called_count"),
+            func.count(
+                case((QueueTicket.status == TicketStatus.SERVING, QueueTicket.id))
+            ).label("serving_count"),
+            func.coalesce(func.max(QueueTicket.queue_position), 0).label("max_pos"),
+        ).where(QueueTicket.queue_id == queue.id)
+    ).one()
+
+    return DoctorQueuePreviewResponse(
+        id=queue.id,
+        queue_id=queue.id,
+        doctor_id=queue.doctor_id,
+        queue_date=queue.queue_date,
+        is_paused=queue.is_paused,
+        is_active=queue.is_active,
+        waiting_count=counts.waiting_count,
+        called_count=counts.called_count,
+        serving_count=counts.serving_count,
+        estimated_position_if_joined=counts.max_pos + 1,
+    )

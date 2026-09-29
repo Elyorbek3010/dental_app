@@ -454,6 +454,38 @@ class AppLocalizationsRu extends AppLocalizations {
   String get queueStatusActive => 'Активна';
 
   @override
+  String get queueStatusActiveBadge => 'Очередь активна';
+
+  @override
+  String get currentlyServingLabel => 'Сейчас на приёме';
+
+  @override
+  String get waitingCountLabel => 'В ожидании';
+
+  @override
+  String get calledCountLabel => 'Вызваны';
+
+  @override
+  String get ifYouJoinNowLabel => 'Если вы войдёте сейчас';
+
+  @override
+  String get estimatedPositionLabel => 'Примерное место в очереди';
+
+  @override
+  String estimatedPositionValue(int position) {
+    return '#$position';
+  }
+
+  @override
+  String get queueTemporarilyPaused => 'Очередь временно приостановлена';
+
+  @override
+  String get todayQueueNotOpened => 'Сегодня очередь не открыта';
+
+  @override
+  String get queueUnavailableState => 'Очередь недоступна';
+
+  @override
   String get queueDateLabel => 'Дата';
 
   @override

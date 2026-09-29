@@ -450,6 +450,38 @@ class AppLocalizationsEn extends AppLocalizations {
   String get queueStatusActive => 'Active';
 
   @override
+  String get queueStatusActiveBadge => 'Queue active';
+
+  @override
+  String get currentlyServingLabel => 'Currently serving';
+
+  @override
+  String get waitingCountLabel => 'Waiting';
+
+  @override
+  String get calledCountLabel => 'Called';
+
+  @override
+  String get ifYouJoinNowLabel => 'If you join now';
+
+  @override
+  String get estimatedPositionLabel => 'Estimated position';
+
+  @override
+  String estimatedPositionValue(int position) {
+    return '#$position';
+  }
+
+  @override
+  String get queueTemporarilyPaused => 'Queue temporarily paused';
+
+  @override
+  String get todayQueueNotOpened => 'Today\'s queue has not been opened';
+
+  @override
+  String get queueUnavailableState => 'Queue unavailable';
+
+  @override
   String get queueDateLabel => 'Date';
 
   @override
