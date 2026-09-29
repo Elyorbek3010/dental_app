@@ -72,4 +72,14 @@ class ApiConfig {
 
   static Uri queueStatusUri(int queueId) =>
       Uri.parse('$_baseUrl/api/queues/$queueId/status');
+
+  static Uri clinicDisplayWsUri(int clinicId) {
+    final baseUri = Uri.parse(_baseUrl);
+    final wsScheme = baseUri.scheme == 'https' ? 'wss' : 'ws';
+    final normalizedPath = baseUri.path.replaceAll(RegExp(r'/+$'), '');
+    return baseUri.replace(
+      scheme: wsScheme,
+      path: '$normalizedPath/api/public/ws/clinics/$clinicId/display',
+    );
+  }
 }

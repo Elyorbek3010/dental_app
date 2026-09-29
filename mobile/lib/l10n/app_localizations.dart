@@ -904,6 +904,66 @@ abstract class AppLocalizations {
   /// **'Faol'**
   String get queueStatusActive;
 
+  /// No description provided for @queueStatusActiveBadge.
+  ///
+  /// In uz, this message translates to:
+  /// **'Navbat faol'**
+  String get queueStatusActiveBadge;
+
+  /// No description provided for @currentlyServingLabel.
+  ///
+  /// In uz, this message translates to:
+  /// **'Hozir qabulda'**
+  String get currentlyServingLabel;
+
+  /// No description provided for @waitingCountLabel.
+  ///
+  /// In uz, this message translates to:
+  /// **'Kutayotganlar'**
+  String get waitingCountLabel;
+
+  /// No description provided for @calledCountLabel.
+  ///
+  /// In uz, this message translates to:
+  /// **'Chaqirilganlar'**
+  String get calledCountLabel;
+
+  /// No description provided for @ifYouJoinNowLabel.
+  ///
+  /// In uz, this message translates to:
+  /// **'Agar hozir qo‘shilsangiz'**
+  String get ifYouJoinNowLabel;
+
+  /// No description provided for @estimatedPositionLabel.
+  ///
+  /// In uz, this message translates to:
+  /// **'Taxminiy o‘rningiz'**
+  String get estimatedPositionLabel;
+
+  /// No description provided for @estimatedPositionValue.
+  ///
+  /// In uz, this message translates to:
+  /// **'#{position}'**
+  String estimatedPositionValue(int position);
+
+  /// No description provided for @queueTemporarilyPaused.
+  ///
+  /// In uz, this message translates to:
+  /// **'Navbat vaqtincha to‘xtatilgan'**
+  String get queueTemporarilyPaused;
+
+  /// No description provided for @todayQueueNotOpened.
+  ///
+  /// In uz, this message translates to:
+  /// **'Bugun navbat ochilmagan'**
+  String get todayQueueNotOpened;
+
+  /// No description provided for @queueUnavailableState.
+  ///
+  /// In uz, this message translates to:
+  /// **'Navbat mavjud emas'**
+  String get queueUnavailableState;
+
   /// No description provided for @queueDateLabel.
   ///
   /// In uz, this message translates to:

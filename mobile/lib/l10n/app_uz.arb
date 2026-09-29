@@ -197,6 +197,23 @@
   "todayQueueHeader": "Bugungi navbat holati",
   "queueStatusPaused": "Pauza",
   "queueStatusActive": "Faol",
+  "queueStatusActiveBadge": "Navbat faol",
+  "currentlyServingLabel": "Hozir qabulda",
+  "waitingCountLabel": "Kutayotganlar",
+  "calledCountLabel": "Chaqirilganlar",
+  "ifYouJoinNowLabel": "Agar hozir qo‘shilsangiz",
+  "estimatedPositionLabel": "Taxminiy o‘rningiz",
+  "estimatedPositionValue": "#{position}",
+  "@estimatedPositionValue": {
+    "placeholders": {
+      "position": {
+        "type": "int"
+      }
+    }
+  },
+  "queueTemporarilyPaused": "Navbat vaqtincha to‘xtatilgan",
+  "todayQueueNotOpened": "Bugun navbat ochilmagan",
+  "queueUnavailableState": "Navbat mavjud emas",
   "queueDateLabel": "Sana",
   "admissionStatusLabel": "Qabul holati",
   "admissionStatusPaused": "Vaqtincha to‘xtatilgan",

@@ -152,7 +152,9 @@ def cancel_my_ticket(
     db.commit()
     db.refresh(ticket)
 
-    if doctor:
+    if doctor and queue:
+        notify_display_update(doctor.clinic_id, background_tasks, queue_id=queue.id)
+    elif doctor:
         notify_display_update(doctor.clinic_id, background_tasks)
     if queue:
         schedule_approaching_check(queue.id, background_tasks)
@@ -225,7 +227,7 @@ def open_today_queue(
             existing_queue.is_paused = False
             db.commit()
             db.refresh(existing_queue)
-            notify_display_update(doctor.clinic_id, background_tasks)
+            notify_display_update(doctor.clinic_id, background_tasks, queue_id=existing_queue.id)
             return existing_queue
 
     new_queue = Queue(
@@ -253,7 +255,7 @@ def open_today_queue(
             detail="Queue already exists for this doctor today",
         )
 
-    notify_display_update(doctor.clinic_id, background_tasks)
+    notify_display_update(doctor.clinic_id, background_tasks, queue_id=new_queue.id)
     return new_queue
 
 
@@ -432,7 +434,7 @@ def qr_check_in_patient(
     ticket.check_in_method = CheckInMethod.QR
     db.commit()
     db.refresh(ticket)
-    notify_display_update(clinic_id, background_tasks)
+    notify_display_update(clinic_id, background_tasks, queue_id=ticket.queue_id)
     return ticket
 
 
@@ -527,7 +529,7 @@ def pause_queue(
     queue.is_paused = True
     db.commit()
     db.refresh(queue)
-    notify_display_update(doctor.clinic_id, background_tasks)
+    notify_display_update(doctor.clinic_id, background_tasks, queue_id=queue.id)
     schedule_paused_notification(queue.id, background_tasks)
     return queue
 
@@ -583,7 +585,7 @@ def resume_queue(
     queue.is_paused = False
     db.commit()
     db.refresh(queue)
-    notify_display_update(doctor.clinic_id, background_tasks)
+    notify_display_update(doctor.clinic_id, background_tasks, queue_id=queue.id)
     schedule_resumed_notification(queue.id, background_tasks)
     return queue
 
@@ -741,7 +743,7 @@ def call_next_patient(
 
     db.commit()
     db.refresh(called_ticket)
-    notify_display_update(doctor.clinic_id, background_tasks)
+    notify_display_update(doctor.clinic_id, background_tasks, queue_id=queue.id)
     for passed_id in passed_ticket_ids:
         schedule_missed_turn_notification(passed_id, background_tasks)
     if called_ticket.patient_id is not None:
@@ -808,7 +810,7 @@ def call_patient(
     ticket.status = TicketStatus.CALLED
     db.commit()
     db.refresh(ticket)
-    notify_display_update(doctor.clinic_id, background_tasks)
+    notify_display_update(doctor.clinic_id, background_tasks, queue_id=queue.id)
     if ticket.patient_id is not None:
         schedule_called_notification(ticket.id, doctor.room_number, background_tasks)
     schedule_approaching_check(queue.id, background_tasks)
@@ -873,7 +875,7 @@ def serve_patient(
     ticket.status = TicketStatus.SERVING
     db.commit()
     db.refresh(ticket)
-    notify_display_update(doctor.clinic_id, background_tasks)
+    notify_display_update(doctor.clinic_id, background_tasks, queue_id=queue.id)
     schedule_approaching_check(queue.id, background_tasks)
     return ticket
 
@@ -936,7 +938,7 @@ def complete_patient(
     ticket.status = TicketStatus.COMPLETED
     db.commit()
     db.refresh(ticket)
-    notify_display_update(doctor.clinic_id, background_tasks)
+    notify_display_update(doctor.clinic_id, background_tasks, queue_id=queue.id)
     if ticket.patient_id is not None:
         schedule_completed_notification(ticket.id, background_tasks)
     schedule_approaching_check(queue.id, background_tasks)
@@ -1001,7 +1003,7 @@ def skip_patient(
     ticket.status = TicketStatus.SKIPPED
     db.commit()
     db.refresh(ticket)
-    notify_display_update(doctor.clinic_id, background_tasks)
+    notify_display_update(doctor.clinic_id, background_tasks, queue_id=queue.id)
     schedule_approaching_check(queue.id, background_tasks)
     return ticket
 
@@ -1075,7 +1077,7 @@ def restore_patient(
     ticket.queue_position = new_queue_position
     db.commit()
     db.refresh(ticket)
-    notify_display_update(doctor.clinic_id, background_tasks)
+    notify_display_update(doctor.clinic_id, background_tasks, queue_id=queue.id)
     schedule_approaching_check(queue.id, background_tasks)
     return ticket
 
@@ -1145,7 +1147,7 @@ def cancel_patient(
     ticket.status = TicketStatus.CANCELLED
     db.commit()
     db.refresh(ticket)
-    notify_display_update(doctor.clinic_id, background_tasks)
+    notify_display_update(doctor.clinic_id, background_tasks, queue_id=queue.id)
     schedule_approaching_check(queue.id, background_tasks)
     return ticket
 
@@ -1221,7 +1223,7 @@ def manual_check_in_patient(
     ticket.check_in_method = CheckInMethod.RECEPTION
     db.commit()
     db.refresh(ticket)
-    notify_display_update(doctor.clinic_id, background_tasks)
+    notify_display_update(doctor.clinic_id, background_tasks, queue_id=queue.id)
     return ticket
 
 
@@ -1300,7 +1302,7 @@ def miss_turn_patient(
     ticket.queue_position = next_queue_position
     db.commit()
     db.refresh(ticket)
-    notify_display_update(doctor.clinic_id, background_tasks)
+    notify_display_update(doctor.clinic_id, background_tasks, queue_id=queue.id)
     if ticket.patient_id is not None:
         schedule_missed_turn_notification(ticket.id, background_tasks)
     schedule_approaching_check(queue.id, background_tasks)
@@ -1386,6 +1388,9 @@ def join_queue(
     db.add(ticket)
     db.commit()
     db.refresh(ticket)
+    doctor = db.scalar(select(Doctor).where(Doctor.id == queue.doctor_id))
+    if doctor:
+        notify_display_update(doctor.clinic_id, background_tasks, queue_id=queue.id)
     schedule_joined_notification(ticket.id, background_tasks)
     schedule_approaching_check(queue.id, background_tasks)
     return ticket
@@ -1474,6 +1479,6 @@ def add_walk_in_patient(
     db.add(ticket)
     db.commit()
     db.refresh(ticket)
-    notify_display_update(doctor.clinic_id, background_tasks)
+    notify_display_update(doctor.clinic_id, background_tasks, queue_id=queue.id)
     schedule_approaching_check(queue.id, background_tasks)
     return ticket

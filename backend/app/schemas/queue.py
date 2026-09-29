@@ -32,6 +32,21 @@ class QueueResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class DoctorQueuePreviewResponse(BaseModel):
+    id: int
+    queue_id: int
+    doctor_id: int
+    queue_date: date
+    is_paused: bool
+    is_active: bool
+    waiting_count: int
+    called_count: int
+    serving_count: int
+    estimated_position_if_joined: int
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class QueueTicketResponse(BaseModel):
     id: int
     queue_id: int
