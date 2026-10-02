@@ -105,10 +105,12 @@ def get_my_ticket(
         checked_in_at=ticket.checked_in_at,
         check_in_method=ticket.check_in_method,
         people_ahead=people_ahead,
+        clinic_id=doctor.clinic_id,
         doctor=MyTicketDoctorResponse(
             id=doctor.id,
             full_name=doctor.full_name,
             room_number=doctor.room_number,
+            clinic_id=doctor.clinic_id,
         ),
         specialization=MyTicketSpecializationResponse(
             id=specialization.id,

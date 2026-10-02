@@ -169,6 +169,7 @@ class _DoctorQueueScreenState extends State<DoctorQueueScreen> {
           builder: (_) => PatientShell(
             initialIndex: 1,
             queueService: _queueService,
+            realtimeService: widget.realtimeService,
           ),
         ),
         (route) => false,

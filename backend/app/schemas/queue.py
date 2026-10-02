@@ -69,6 +69,7 @@ class MyTicketDoctorResponse(BaseModel):
     id: int
     full_name: str
     room_number: str | None = None
+    clinic_id: int | None = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -91,6 +92,7 @@ class MyQueueTicketResponse(BaseModel):
     specialization: MyTicketSpecializationResponse
     checked_in_at: datetime | None = None
     check_in_method: CheckInMethod | None = None
+    clinic_id: int | None = None
 
     model_config = ConfigDict(from_attributes=True)
 

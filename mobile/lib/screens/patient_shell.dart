@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../l10n/l10n.dart';
 import '../services/auth_controller.dart';
 import '../services/push_notification_service.dart';
+import '../services/queue_realtime_service.dart';
 import '../services/queue_service.dart';
 import '../services/reminder_service.dart';
 import 'home_screen.dart';
@@ -23,6 +24,7 @@ class PatientShell extends StatefulWidget {
     this.authController,
     this.queueService,
     this.pushNotificationService,
+    this.realtimeService,
   });
 
   final int initialIndex;
@@ -30,6 +32,7 @@ class PatientShell extends StatefulWidget {
   final AuthController? authController;
   final QueueService? queueService;
   final PushNotificationService? pushNotificationService;
+  final QueueRealtimeService? realtimeService;
 
   @override
   State<PatientShell> createState() => _PatientShellState();
@@ -64,6 +67,7 @@ class _PatientShellState extends State<PatientShell> {
       MyQueueScreen(
         queueService: widget.queueService,
         pushNotificationService: widget.pushNotificationService,
+        realtimeService: widget.realtimeService,
       ),
       RemindersScreen(reminderService: widget.reminderService),
       ProfileScreen(authController: widget.authController),

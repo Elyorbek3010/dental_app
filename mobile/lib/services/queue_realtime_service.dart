@@ -35,7 +35,11 @@ class QueueRealtimeService {
   QueueRealtimeService({ChannelFactory? channelFactory})
       : _channelFactory = channelFactory ?? ((uri) => WebSocketChannel.connect(uri));
 
-  static final QueueRealtimeService instance = QueueRealtimeService();
+  static QueueRealtimeService _instance = QueueRealtimeService();
+  static QueueRealtimeService get instance => _instance;
+
+  @visibleForTesting
+  static set instance(QueueRealtimeService s) => _instance = s;
 
   final ChannelFactory _channelFactory;
   final _eventController = StreamController<QueueUpdatedEvent>.broadcast();

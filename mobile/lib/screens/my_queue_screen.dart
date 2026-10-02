@@ -2,9 +2,11 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../config/api_config.dart';
 import '../l10n/l10n.dart';
 import '../models/patient_ticket.dart';
 import '../services/push_notification_service.dart';
+import '../services/queue_realtime_service.dart';
 import '../services/queue_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/error_localizer.dart';
@@ -27,19 +29,23 @@ class MyQueueScreen extends StatefulWidget {
     super.key,
     this.queueService,
     this.pushNotificationService,
+    this.realtimeService,
   });
 
   final QueueService? queueService;
   final PushNotificationService? pushNotificationService;
+  final QueueRealtimeService? realtimeService;
 
   @override
   State<MyQueueScreen> createState() => _MyQueueScreenState();
 }
 
-class _MyQueueScreenState extends State<MyQueueScreen> {
+class _MyQueueScreenState extends State<MyQueueScreen> with WidgetsBindingObserver {
   late final QueueService _queueService;
   late final PushNotificationService _pushNotificationService;
+  late final QueueRealtimeService _realtimeService;
   StreamSubscription<Map<String, dynamic>>? _queueEventSubscription;
+  StreamSubscription<QueueUpdatedEvent>? _realtimeSubscription;
 
   MyQueueTicket? _ticket;
   bool _isLoading = true;
@@ -50,11 +56,23 @@ class _MyQueueScreenState extends State<MyQueueScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _queueService = widget.queueService ?? QueueService.instance;
     _pushNotificationService =
         widget.pushNotificationService ?? PushNotificationService.instance;
+    _realtimeService = widget.realtimeService ?? QueueRealtimeService.instance;
     _fetchMyTicket();
     _subscribeToQueueEvents();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      debugPrint('[MyQueueScreen] App resumed from background, silently refreshing ticket');
+      _pushNotificationService.ensureListeners();
+      _fetchMyTicket(isSilent: _ticket != null);
+      _connectRealtime();
+    }
   }
 
   void _subscribeToQueueEvents() {
@@ -69,15 +87,43 @@ class _MyQueueScreenState extends State<MyQueueScreen> {
         debugPrint('[MyQueueScreen] Error in queue event subscription: $error');
       },
     );
+
+    _connectRealtime();
+    _realtimeSubscription = _realtimeService.events.listen(
+      (event) {
+        if (!mounted) return;
+        // Trigger refetch if event matches current queue, current queue was null, or clinic-wide
+        if (event.queueId == null ||
+            _ticket == null ||
+            event.queueId == _ticket!.queueId) {
+          debugPrint('[MyQueueScreen] Received WebSocket queue update, refreshing ticket');
+          _fetchMyTicket(isSilent: _ticket != null);
+        }
+      },
+      onError: (Object error) {
+        debugPrint('[MyQueueScreen] Realtime WebSocket error: $error');
+      },
+    );
+  }
+
+  void _connectRealtime() {
+    final clinicId = _ticket?.clinicId ?? _ticket?.doctor.clinicId ?? ApiConfig.defaultClinicId;
+    _realtimeService.connect(clinicId);
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _queueEventSubscription?.cancel();
+    _queueEventSubscription = null;
+    _realtimeSubscription?.cancel();
+    _realtimeSubscription = null;
     super.dispose();
   }
 
   Future<void> _fetchMyTicket({bool isSilent = false}) async {
+    if (isSilent && (_isCheckingIn || _isCancelling)) return;
+
     if (!isSilent) {
       setState(() {
         _isLoading = true;
@@ -92,6 +138,12 @@ class _MyQueueScreenState extends State<MyQueueScreen> {
           _ticket = ticket;
           _isLoading = false;
         });
+        if (ticket != null) {
+          final clinicId = ticket.clinicId ?? ticket.doctor.clinicId ?? ApiConfig.defaultClinicId;
+          if (_realtimeService.activeClinicId != clinicId) {
+            _realtimeService.connect(clinicId);
+          }
+        }
       }
     } on QueueException catch (e) {
       if (mounted) {

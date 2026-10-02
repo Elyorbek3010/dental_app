@@ -32,6 +32,7 @@ class PushNotificationService {
   StreamSubscription<String>? _tokenRefreshSubscription;
   StreamSubscription<RemoteMessage>? _foregroundSubscription;
   StreamSubscription<RemoteMessage>? _messageOpenedAppSubscription;
+  RemoteMessage? _pendingInitialMessage;
 
   final StreamController<Map<String, dynamic>> _queueEventController =
       StreamController<Map<String, dynamic>>.broadcast();
@@ -167,6 +168,14 @@ class PushNotificationService {
     setupForegroundMessageListener();
     setupInteractionListeners();
     setupTokenRefreshListener();
+
+    if (_pendingInitialMessage != null) {
+      final pending = _pendingInitialMessage!;
+      _pendingInitialMessage = null;
+      handleRemoteMessage(pending);
+    } else {
+      checkInitialMessage();
+    }
   }
 
   /// Initializes notification permissions, sets up listeners for token refresh,
@@ -349,7 +358,11 @@ class PushNotificationService {
       final initialMessage = await messaging.getInitialMessage();
       if (initialMessage != null) {
         debugPrint('FCM notification opened from terminated state');
-        handleRemoteMessage(initialMessage);
+        if (_queueEventController.hasListener) {
+          handleRemoteMessage(initialMessage);
+        } else {
+          _pendingInitialMessage = initialMessage;
+        }
       }
     } catch (e) {
       debugPrint('[PushNotificationService] Error checking initial FCM message: $e');

@@ -7,11 +7,13 @@ class MyTicketDoctor {
   final int id;
   final String fullName;
   final String? roomNumber;
+  final int? clinicId;
 
   const MyTicketDoctor({
     required this.id,
     required this.fullName,
     this.roomNumber,
+    this.clinicId,
   });
 
   factory MyTicketDoctor.fromJson(Map<String, dynamic> json) {
@@ -19,6 +21,7 @@ class MyTicketDoctor {
       id: json['id'] as int,
       fullName: json['full_name'] as String? ?? '',
       roomNumber: json['room_number'] as String?,
+      clinicId: json['clinic_id'] as int?,
     );
   }
 
@@ -26,6 +29,7 @@ class MyTicketDoctor {
         'id': id,
         'full_name': fullName,
         if (roomNumber != null) 'room_number': roomNumber,
+        if (clinicId != null) 'clinic_id': clinicId,
       };
 }
 
@@ -66,6 +70,7 @@ class MyQueueTicket {
   final int? queuePosition;
   final DateTime? checkedInAt;
   final String? checkInMethod;
+  final int? clinicId;
 
   const MyQueueTicket({
     required this.id,
@@ -79,9 +84,14 @@ class MyQueueTicket {
     this.queuePosition,
     this.checkedInAt,
     this.checkInMethod,
+    this.clinicId,
   });
 
   factory MyQueueTicket.fromJson(Map<String, dynamic> json) {
+    final doctorJson = json['doctor'] as Map<String, dynamic>? ?? {};
+    final docClinicId = doctorJson['clinic_id'] as int?;
+    final rootClinicId = json['clinic_id'] as int?;
+
     return MyQueueTicket(
       id: json['id'] as int,
       queueId: json['queue_id'] as int,
@@ -91,9 +101,7 @@ class MyQueueTicket {
           ? DateTime.parse(json['created_at'].toString())
           : DateTime.now(),
       peopleAhead: json['people_ahead'] as int? ?? 0,
-      doctor: MyTicketDoctor.fromJson(
-        json['doctor'] as Map<String, dynamic>? ?? {},
-      ),
+      doctor: MyTicketDoctor.fromJson(doctorJson),
       specialization: MyTicketSpecialization.fromJson(
         json['specialization'] as Map<String, dynamic>? ?? {},
       ),
@@ -102,6 +110,7 @@ class MyQueueTicket {
           ? DateTime.tryParse(json['checked_in_at'].toString())
           : null,
       checkInMethod: json['check_in_method'] as String?,
+      clinicId: rootClinicId ?? docClinicId,
     );
   }
 
@@ -118,6 +127,7 @@ class MyQueueTicket {
         if (checkedInAt != null)
           'checked_in_at': checkedInAt!.toIso8601String(),
         if (checkInMethod != null) 'check_in_method': checkInMethod,
+        if (clinicId != null) 'clinic_id': clinicId,
       };
 
   /// Uzbek presentation label for ticket status (fallback).
