@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
     CHECK_IN_QR_EXPIRE_MINUTES: int = 180  # 3 hours
     FIREBASE_CREDENTIALS_PATH: str | None = "secrets/firebase-service-account.json"
+    TEST_DATABASE_URL: str | None = None
 
     model_config = SettingsConfigDict(
         env_file=".env",

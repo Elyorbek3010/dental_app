@@ -15,8 +15,10 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# Use the same database URL as our FastAPI application.
-config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
+import os
+# Use ALEMBIC_DATABASE_URL if provided (e.g. for test DB migrations), else settings.DATABASE_URL.
+target_url = os.getenv("ALEMBIC_DATABASE_URL") or settings.DATABASE_URL
+config.set_main_option("sqlalchemy.url", target_url)
 
 # Alembic will inspect our SQLAlchemy models through this metadata.
 target_metadata = Base.metadata

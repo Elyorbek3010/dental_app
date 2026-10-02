@@ -6,7 +6,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import delete, select
 
 from app.core.security import create_access_token
-from app.db.session import SessionLocal
+from tests.test_db import TestSessionLocal as SessionLocal
 from app.main import app
 from app.models.clinic import Clinic
 from app.models.doctor import Doctor
