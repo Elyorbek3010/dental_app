@@ -207,5 +207,11 @@
   "errorNoWaitingTicketForClinic": "No active waiting ticket found for this clinic.",
   "errorTicketAlreadyCheckedIn": "This queue ticket is already checked in.",
   "errorCannotCancelOtherTicket": "You cannot cancel another patient's ticket.",
-  "errorOnlyWaitingCalledCancellable": "Only waiting or called tickets can be cancelled."
+  "errorOnlyWaitingCalledCancellable": "Only waiting or called tickets can be cancelled.",
+  "skippedBannerTitle": "Your ticket was skipped",
+  "skippedBannerSubtitle": "Your ticket is temporarily skipped. Only reception can restore it to the queue.",
+  "fgNotifCalled": "It's your turn! Please proceed to the doctor's room.",
+  "fgNotifSkipped": "Your ticket was skipped. Please contact reception to restore it.",
+  "fgNotifRestored": "Your ticket has been restored to the queue.",
+  "fgNotifMissedTurn": "You missed your turn and your ticket was moved to the end."
 }

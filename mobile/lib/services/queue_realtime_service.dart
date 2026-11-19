@@ -43,11 +43,13 @@ class QueueRealtimeService {
 
   final ChannelFactory _channelFactory;
   final _eventController = StreamController<QueueUpdatedEvent>.broadcast();
+  final Set<Object> _consumers = <Object>{};
 
   int? _activeClinicId;
   WebSocketChannel? _channel;
   StreamSubscription<dynamic>? _subscription;
   Timer? _reconnectTimer;
+  Timer? _keepaliveTimer;
   int _reconnectDelaySeconds = 1;
   bool _isDisposed = false;
   bool _isConnected = false;
@@ -61,6 +63,30 @@ class QueueRealtimeService {
   /// Currently connected clinic ID.
   int? get activeClinicId => _activeClinicId;
 
+  /// Connects on behalf of a UI [consumer] without breaking other active listeners.
+  void connectForConsumer(Object consumer, int clinicId) {
+    if (_isDisposed) return;
+    _consumers.add(consumer);
+    ensureConnected(clinicId);
+  }
+
+  /// Releases a UI [consumer] and closes the socket only when no consumers remain.
+  void disconnectConsumer(Object consumer) {
+    _consumers.remove(consumer);
+    if (_consumers.isEmpty) {
+      disconnect();
+    }
+  }
+
+  /// Connects to [clinicId], optionally forcing a fresh socket if stale.
+  void ensureConnected(int clinicId, {bool forceReconnect = false}) {
+    if (_isDisposed) return;
+    if (forceReconnect) {
+      _closeConnection();
+    }
+    connect(clinicId);
+  }
+
   /// Connects to the WebSocket for [clinicId] with exponential backoff reconnect.
   void connect(int clinicId) {
     if (_isDisposed) return;
@@ -68,7 +94,9 @@ class QueueRealtimeService {
       return;
     }
 
-    disconnect();
+    _reconnectTimer?.cancel();
+    _reconnectTimer = null;
+    _cleanupSocket();
     _activeClinicId = clinicId;
     _reconnectDelaySeconds = 1;
     _establishConnection();
@@ -101,11 +129,25 @@ class QueueRealtimeService {
 
       _isConnected = true;
       _reconnectDelaySeconds = 1;
+      _startKeepalive();
       debugPrint('[QueueRealtimeService] Connected to WebSocket at $uri');
     } catch (e) {
       debugPrint('[QueueRealtimeService] Failed to establish WebSocket: $e');
       _onDisconnected();
     }
+  }
+
+  void _startKeepalive() {
+    _keepaliveTimer?.cancel();
+    _keepaliveTimer = Timer.periodic(const Duration(seconds: 25), (_) {
+      if (_isDisposed || !_isConnected || _channel == null) return;
+      try {
+        _channel!.sink.add(jsonEncode({'type': 'ping'}));
+      } catch (e) {
+        debugPrint('[QueueRealtimeService] Keepalive ping failed: $e');
+        _onDisconnected();
+      }
+    });
   }
 
   void _onData(dynamic data) {
@@ -156,6 +198,8 @@ class QueueRealtimeService {
   }
 
   void _cleanupSocket() {
+    _keepaliveTimer?.cancel();
+    _keepaliveTimer = null;
     _subscription?.cancel();
     _subscription = null;
     try {
@@ -165,13 +209,18 @@ class QueueRealtimeService {
     _isConnected = false;
   }
 
-  /// Disconnects from the current clinic's WebSocket.
-  void disconnect() {
+  void _closeConnection() {
     _reconnectTimer?.cancel();
     _reconnectTimer = null;
     _cleanupSocket();
     _activeClinicId = null;
     _reconnectDelaySeconds = 1;
+  }
+
+  /// Disconnects from the current clinic's WebSocket.
+  void disconnect() {
+    _consumers.clear();
+    _closeConnection();
   }
 
   /// Releases all resources.

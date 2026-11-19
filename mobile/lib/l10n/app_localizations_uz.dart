@@ -648,4 +648,25 @@ class AppLocalizationsUz extends AppLocalizations {
   @override
   String get errorOnlyWaitingCalledCancellable =>
       'Faqat kutilayotgan yoki chaqirilgan talonlar bekor qilinishi mumkin.';
+
+  @override
+  String get skippedBannerTitle => 'Taloningiz o‘tkazib yuborildi';
+
+  @override
+  String get skippedBannerSubtitle =>
+      'Taloningiz vaqtincha chetlatilgan. Navbatni faqat qabulxona qayta tiklashi mumkin.';
+
+  @override
+  String get fgNotifCalled => 'Navbatingiz keldi! Iltimos, qabulga kiring.';
+
+  @override
+  String get fgNotifSkipped =>
+      'Taloningiz o‘tkazib yuborildi. Qayta tiklash uchun qabulxonaga murojaat qiling.';
+
+  @override
+  String get fgNotifRestored => 'Taloningiz navbatga qayta tiklandi.';
+
+  @override
+  String get fgNotifMissedTurn =>
+      'Navbatingiz o‘tkazildi va navbat oxiriga ko‘chirildi.';
 }

@@ -650,4 +650,26 @@ class AppLocalizationsRu extends AppLocalizations {
   @override
   String get errorOnlyWaitingCalledCancellable =>
       'Отменить можно только ожидающие или вызванные талоны.';
+
+  @override
+  String get skippedBannerTitle => 'Ваш талон пропущен';
+
+  @override
+  String get skippedBannerSubtitle =>
+      'Ваш талон временно отложен. Восстановить его в очереди может только регистратура.';
+
+  @override
+  String get fgNotifCalled =>
+      'Ваша очередь подошла! Пожалуйста, пройдите в кабинет.';
+
+  @override
+  String get fgNotifSkipped =>
+      'Ваш талон пропущен. Обратитесь в регистратуру для восстановления.';
+
+  @override
+  String get fgNotifRestored => 'Ваш талон восстановлен в очереди.';
+
+  @override
+  String get fgNotifMissedTurn =>
+      'Ваша очередь прошла, талон перемещен в конец очереди.';
 }

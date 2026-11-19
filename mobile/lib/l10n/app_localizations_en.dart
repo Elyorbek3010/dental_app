@@ -645,4 +645,26 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get errorOnlyWaitingCalledCancellable =>
       'Only waiting or called tickets can be cancelled.';
+
+  @override
+  String get skippedBannerTitle => 'Your ticket was skipped';
+
+  @override
+  String get skippedBannerSubtitle =>
+      'Your ticket is temporarily skipped. Only reception can restore it to the queue.';
+
+  @override
+  String get fgNotifCalled =>
+      'It\'s your turn! Please proceed to the doctor\'s room.';
+
+  @override
+  String get fgNotifSkipped =>
+      'Your ticket was skipped. Please contact reception to restore it.';
+
+  @override
+  String get fgNotifRestored => 'Your ticket has been restored to the queue.';
+
+  @override
+  String get fgNotifMissedTurn =>
+      'You missed your turn and your ticket was moved to the end.';
 }

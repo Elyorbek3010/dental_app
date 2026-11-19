@@ -23,7 +23,9 @@ from app.services.queue_notifications import (
     schedule_joined_notification,
     schedule_missed_turn_notification,
     schedule_paused_notification,
+    schedule_restored_notification,
     schedule_resumed_notification,
+    schedule_skipped_notification,
     trigger_missed_turn_notification,
 )
 from app.schemas.queue import (
@@ -53,6 +55,10 @@ router = APIRouter(
     response_model=MyQueueTicketResponse,
 )
 def get_my_ticket(
+    include_skipped: bool = Query(
+        default=False,
+        description="If true, fall back to today's active-queue SKIPPED ticket when no WAITING/CALLED/SERVING ticket exists",
+    ),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_roles(UserRole.PATIENT)),
     lang: str = Depends(get_language),
@@ -73,6 +79,22 @@ def get_my_ticket(
         .order_by(QueueTicket.created_at.desc())
     ).first()
 
+    if not result and include_skipped:
+        today = date.today()
+        result = db.execute(
+            select(QueueTicket, Doctor, Specialization)
+            .join(Queue, QueueTicket.queue_id == Queue.id)
+            .join(Doctor, Queue.doctor_id == Doctor.id)
+            .join(Specialization, Doctor.specialization_id == Specialization.id)
+            .where(
+                QueueTicket.patient_id == current_user.id,
+                QueueTicket.status == TicketStatus.SKIPPED,
+                Queue.queue_date == today,
+                Queue.is_active == True,
+            )
+            .order_by(QueueTicket.created_at.desc())
+        ).first()
+
     if not result:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -81,20 +103,23 @@ def get_my_ticket(
 
     ticket, doctor, specialization = result
 
-    people_ahead = (
-        db.scalar(
-            select(func.count(QueueTicket.id)).where(
-                QueueTicket.queue_id == ticket.queue_id,
-                QueueTicket.queue_position < ticket.queue_position,
-                QueueTicket.status.in_([
-                    TicketStatus.WAITING,
-                    TicketStatus.CALLED,
-                    TicketStatus.SERVING,
-                ]),
+    if ticket.status == TicketStatus.SKIPPED:
+        people_ahead = 0
+    else:
+        people_ahead = (
+            db.scalar(
+                select(func.count(QueueTicket.id)).where(
+                    QueueTicket.queue_id == ticket.queue_id,
+                    QueueTicket.queue_position < ticket.queue_position,
+                    QueueTicket.status.in_([
+                        TicketStatus.WAITING,
+                        TicketStatus.CALLED,
+                        TicketStatus.SERVING,
+                    ]),
+                )
             )
+            or 0
         )
-        or 0
-    )
 
     return MyQueueTicketResponse(
         id=ticket.id,
@@ -725,12 +750,14 @@ def call_next_patient(
 
     called_ticket: QueueTicket | None = None
     passed_ticket_ids: list[int] = []
+    repositioned_any = False
 
     for ticket in waiting_tickets:
         if ticket.checked_in_at is None:
             current_max_pos += 1
             ticket.missed_turns += 1
             ticket.queue_position = current_max_pos
+            repositioned_any = True
             if ticket.patient_id is not None:
                 passed_ticket_ids.append(ticket.id)
         else:
@@ -740,6 +767,8 @@ def call_next_patient(
 
     if not called_ticket:
         db.commit()
+        if repositioned_any:
+            notify_display_update(doctor.clinic_id, None, queue_id=queue.id)
         for passed_id in passed_ticket_ids:
             trigger_missed_turn_notification(passed_id)
         raise HTTPException(
@@ -1010,6 +1039,8 @@ def skip_patient(
     db.commit()
     db.refresh(ticket)
     notify_display_update(doctor.clinic_id, background_tasks, queue_id=queue.id)
+    if ticket.patient_id is not None:
+        schedule_skipped_notification(ticket.id, background_tasks)
     schedule_approaching_check(queue.id, background_tasks)
     return ticket
 
@@ -1084,6 +1115,8 @@ def restore_patient(
     db.commit()
     db.refresh(ticket)
     notify_display_update(doctor.clinic_id, background_tasks, queue_id=queue.id)
+    if ticket.patient_id is not None:
+        schedule_restored_notification(ticket.id, background_tasks)
     schedule_approaching_check(queue.id, background_tasks)
     return ticket
 

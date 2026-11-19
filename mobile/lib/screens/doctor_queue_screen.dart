@@ -39,6 +39,7 @@ class _DoctorQueueScreenState extends State<DoctorQueueScreen> {
   late final CatalogService _catalogService;
   late final QueueService _queueService;
   late final QueueRealtimeService _realtimeService;
+  final Object _realtimeConsumer = Object();
 
   StreamSubscription<QueueUpdatedEvent>? _realtimeSubscription;
   DoctorQueue? _queue;
@@ -58,7 +59,10 @@ class _DoctorQueueScreenState extends State<DoctorQueueScreen> {
 
   void _initRealtime() {
     try {
-      _realtimeService.connect(widget.doctor.clinicId);
+      _realtimeService.connectForConsumer(
+        _realtimeConsumer,
+        widget.doctor.clinicId,
+      );
       _realtimeSubscription = _realtimeService.events.listen(
         (event) {
           if (!mounted) return;
@@ -82,7 +86,7 @@ class _DoctorQueueScreenState extends State<DoctorQueueScreen> {
   void dispose() {
     _realtimeSubscription?.cancel();
     _realtimeSubscription = null;
-    _realtimeService.disconnect();
+    _realtimeService.disconnectConsumer(_realtimeConsumer);
     super.dispose();
   }
 

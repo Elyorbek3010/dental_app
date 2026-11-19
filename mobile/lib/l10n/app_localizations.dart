@@ -1263,6 +1263,42 @@ abstract class AppLocalizations {
   /// In uz, this message translates to:
   /// **'Faqat kutilayotgan yoki chaqirilgan talonlar bekor qilinishi mumkin.'**
   String get errorOnlyWaitingCalledCancellable;
+
+  /// No description provided for @skippedBannerTitle.
+  ///
+  /// In uz, this message translates to:
+  /// **'Taloningiz o‘tkazib yuborildi'**
+  String get skippedBannerTitle;
+
+  /// No description provided for @skippedBannerSubtitle.
+  ///
+  /// In uz, this message translates to:
+  /// **'Taloningiz vaqtincha chetlatilgan. Navbatni faqat qabulxona qayta tiklashi mumkin.'**
+  String get skippedBannerSubtitle;
+
+  /// No description provided for @fgNotifCalled.
+  ///
+  /// In uz, this message translates to:
+  /// **'Navbatingiz keldi! Iltimos, qabulga kiring.'**
+  String get fgNotifCalled;
+
+  /// No description provided for @fgNotifSkipped.
+  ///
+  /// In uz, this message translates to:
+  /// **'Taloningiz o‘tkazib yuborildi. Qayta tiklash uchun qabulxonaga murojaat qiling.'**
+  String get fgNotifSkipped;
+
+  /// No description provided for @fgNotifRestored.
+  ///
+  /// In uz, this message translates to:
+  /// **'Taloningiz navbatga qayta tiklandi.'**
+  String get fgNotifRestored;
+
+  /// No description provided for @fgNotifMissedTurn.
+  ///
+  /// In uz, this message translates to:
+  /// **'Navbatingiz o‘tkazildi va navbat oxiriga ko‘chirildi.'**
+  String get fgNotifMissedTurn;
 }
 
 class _AppLocalizationsDelegate

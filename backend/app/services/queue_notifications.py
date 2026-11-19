@@ -4,7 +4,7 @@ from typing import Any
 
 from sqlalchemy import select, update
 
-from app.db.session import SessionLocal
+from app.db import session as db_session
 from app.models.push_device import PushDevice
 from app.models.queue_ticket import QueueTicket, TicketStatus
 from app.services.notifications import PushNotificationResult, send_push_notification
@@ -35,7 +35,7 @@ def dispatch_patient_notification(
 
     results: list[PushNotificationResult] = []
     try:
-        with SessionLocal() as db:
+        with db_session.SessionLocal() as db:
             active_devices = list(
                 db.scalars(
                     select(PushDevice).where(
@@ -94,7 +94,7 @@ def trigger_joined_notification(ticket_id: int) -> None:
     Body: "Navbatga muvaffaqiyatli qo‘shildingiz. Ticket: №{ticket_number}"
     """
     try:
-        with SessionLocal() as db:
+        with db_session.SessionLocal() as db:
             ticket = db.scalar(
                 select(QueueTicket).where(QueueTicket.id == ticket_id)
             )
@@ -134,7 +134,7 @@ def trigger_called_notification(ticket_id: int, room_number: str | None = None) 
     """
     try:
         resolved_room = room_number
-        with SessionLocal() as db:
+        with db_session.SessionLocal() as db:
             ticket = db.scalar(
                 select(QueueTicket).where(QueueTicket.id == ticket_id)
             )
@@ -186,7 +186,7 @@ def trigger_missed_turn_notification(ticket_id: int) -> None:
     Body: "Navbatingiz o‘tkazib yuborildi. Siz navbat oxiriga ko‘chirildingiz."
     """
     try:
-        with SessionLocal() as db:
+        with db_session.SessionLocal() as db:
             ticket = db.scalar(
                 select(QueueTicket).where(QueueTicket.id == ticket_id)
             )
@@ -215,6 +215,85 @@ def trigger_missed_turn_notification(ticket_id: int) -> None:
         )
 
 
+def trigger_skipped_notification(ticket_id: int) -> None:
+    """
+    Triggered when a patient ticket is manually marked SKIPPED by reception.
+    Distinct from QUEUE_MISSED_TURN (which repositions an unchecked-in WAITING ticket).
+    """
+    try:
+        with db_session.SessionLocal() as db:
+            ticket = db.scalar(
+                select(QueueTicket).where(QueueTicket.id == ticket_id)
+            )
+            if not ticket or ticket.patient_id is None:
+                return
+
+            patient_id = ticket.patient_id
+            ticket_number = ticket.ticket_number
+            queue_id = ticket.queue_id
+
+        dispatch_patient_notification(
+            patient_id=patient_id,
+            title="Dental Queue",
+            body=(
+                f"Taloningiz №{ticket_number} navbatdan vaqtincha chetlatildi (Skipped). "
+                "Qayta tiklash uchun qabulxonaga murojaat qiling."
+            ),
+            data={
+                "type": "QUEUE_SKIPPED",
+                "ticket_id": str(ticket_id),
+                "ticket_number": str(ticket_number),
+                "queue_id": str(queue_id),
+            },
+        )
+    except Exception as exc:
+        logger.error(
+            "Error triggering skipped notification for ticket %s: %s",
+            ticket_id,
+            exc,
+            exc_info=True,
+        )
+
+
+def trigger_restored_notification(ticket_id: int) -> None:
+    """
+    Triggered when a SKIPPED ticket is manually restored to WAITING at the end of the queue.
+    """
+    try:
+        with db_session.SessionLocal() as db:
+            ticket = db.scalar(
+                select(QueueTicket).where(QueueTicket.id == ticket_id)
+            )
+            if not ticket or ticket.patient_id is None:
+                return
+
+            patient_id = ticket.patient_id
+            ticket_number = ticket.ticket_number
+            queue_id = ticket.queue_id
+
+        dispatch_patient_notification(
+            patient_id=patient_id,
+            title="Dental Queue",
+            body=(
+                f"Taloningiz №{ticket_number} navbatga qayta tiklandi "
+                "va navbat oxiriga qo‘shildi."
+            ),
+            data={
+                "type": "QUEUE_RESTORED",
+                "ticket_id": str(ticket_id),
+                "ticket_number": str(ticket_number),
+                "queue_id": str(queue_id),
+            },
+        )
+    except Exception as exc:
+        logger.error(
+            "Error triggering restored notification for ticket %s: %s",
+            ticket_id,
+            exc,
+            exc_info=True,
+        )
+
+
 def trigger_paused_notification(queue_id: int) -> None:
     """
     Triggered when a queue transitions from active to paused.
@@ -223,7 +302,7 @@ def trigger_paused_notification(queue_id: int) -> None:
     Body: "Navbat vaqtincha to‘xtatildi."
     """
     try:
-        with SessionLocal() as db:
+        with db_session.SessionLocal() as db:
             waiting_tickets = list(
                 db.scalars(
                     select(QueueTicket).where(
@@ -262,7 +341,7 @@ def trigger_resumed_notification(queue_id: int) -> None:
     Body: "Navbat yana davom etmoqda."
     """
     try:
-        with SessionLocal() as db:
+        with db_session.SessionLocal() as db:
             waiting_tickets = list(
                 db.scalars(
                     select(QueueTicket).where(
@@ -300,7 +379,7 @@ def trigger_completed_notification(ticket_id: int) -> None:
     Body: "Tashrifingiz yakunlandi. Bizni tanlaganingiz uchun rahmat. Tez orada ko‘rishguncha! 👋"
     """
     try:
-        with SessionLocal() as db:
+        with db_session.SessionLocal() as db:
             ticket = db.scalar(
                 select(QueueTicket).where(QueueTicket.id == ticket_id)
             )
@@ -346,7 +425,7 @@ def check_and_trigger_approaching(queue_id: int) -> None:
     only ONE worker claims approaching_notified_at and dispatches the notification.
     """
     try:
-        with SessionLocal() as db:
+        with db_session.SessionLocal() as db:
             candidate = db.scalar(
                 select(QueueTicket)
                 .where(
@@ -431,6 +510,20 @@ def schedule_missed_turn_notification(ticket_id: int, background_tasks: Any = No
         background_tasks.add_task(trigger_missed_turn_notification, ticket_id)
     else:
         trigger_missed_turn_notification(ticket_id)
+
+
+def schedule_skipped_notification(ticket_id: int, background_tasks: Any = None) -> None:
+    if background_tasks is not None and hasattr(background_tasks, "add_task"):
+        background_tasks.add_task(trigger_skipped_notification, ticket_id)
+    else:
+        trigger_skipped_notification(ticket_id)
+
+
+def schedule_restored_notification(ticket_id: int, background_tasks: Any = None) -> None:
+    if background_tasks is not None and hasattr(background_tasks, "add_task"):
+        background_tasks.add_task(trigger_restored_notification, ticket_id)
+    else:
+        trigger_restored_notification(ticket_id)
 
 
 def schedule_paused_notification(queue_id: int, background_tasks: Any = None) -> None:
