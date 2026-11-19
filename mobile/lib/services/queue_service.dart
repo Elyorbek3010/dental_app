@@ -56,6 +56,12 @@ class QueueService {
   final SecureTokenStorage _storage;
   final AuthService _authService;
   final LocaleController? localeController;
+  bool _includeSkippedInMyTicket = false;
+
+  /// Configures whether [getMyTicket] requests today's SKIPPED ticket as a fallback.
+  void setIncludeSkipped(bool value) {
+    _includeSkippedInMyTicket = value;
+  }
 
   String get _currentLanguage =>
       (localeController ?? LocaleController.instance).languageCode;
@@ -290,7 +296,9 @@ class QueueService {
   /// Throws [QueueException] for network/auth errors.
   Future<MyQueueTicket?> getMyTicket() async {
     try {
-      final uri = ApiConfig.myTicketUri;
+      final uri = _includeSkippedInMyTicket
+          ? ApiConfig.myTicketIncludeSkippedUri
+          : ApiConfig.myTicketUri;
       final response = await _getWithAuth(uri);
 
       if (response.statusCode == 200) {

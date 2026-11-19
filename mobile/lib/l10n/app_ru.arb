@@ -207,5 +207,11 @@
   "errorNoWaitingTicketForClinic": "Для этой клиники не найден активный талон в очереди ожидания.",
   "errorTicketAlreadyCheckedIn": "Этот талон уже зарегистрирован.",
   "errorCannotCancelOtherTicket": "Запрещено отменять талон другого пациента.",
-  "errorOnlyWaitingCalledCancellable": "Отменить можно только ожидающие или вызванные талоны."
+  "errorOnlyWaitingCalledCancellable": "Отменить можно только ожидающие или вызванные талоны.",
+  "skippedBannerTitle": "Ваш талон пропущен",
+  "skippedBannerSubtitle": "Ваш талон временно отложен. Восстановить его в очереди может только регистратура.",
+  "fgNotifCalled": "Ваша очередь подошла! Пожалуйста, пройдите в кабинет.",
+  "fgNotifSkipped": "Ваш талон пропущен. Обратитесь в регистратуру для восстановления.",
+  "fgNotifRestored": "Ваш талон восстановлен в очереди.",
+  "fgNotifMissedTurn": "Ваша очередь прошла, талон перемещен в конец очереди."
 }

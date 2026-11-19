@@ -83,6 +83,8 @@ class PushNotificationService {
           'CALLED',
           'APPROACHING',
           'MISSED_TURN',
+          'SKIPPED',
+          'RESTORED',
           'PAUSED',
           'RESUMED',
           'COMPLETED',
@@ -114,6 +116,14 @@ class PushNotificationService {
       }
       if (body.contains('yaqinlashmoqda') || body.contains('oldingizda')) {
         return 'APPROACHING';
+      }
+      if (body.contains('chetlatildi') ||
+          body.contains('qabulxonaga murojaat') ||
+          body.contains('skipped')) {
+        return 'SKIPPED';
+      }
+      if (body.contains('qayta tiklandi') || body.contains('restored')) {
+        return 'RESTORED';
       }
       if (body.contains('o‘tkazib yuborildi') || body.contains('oxiriga')) {
         return 'MISSED_TURN';
@@ -151,6 +161,15 @@ class PushNotificationService {
       debugPrint('Queue event recognized: $eventType');
       final payload = Map<String, dynamic>.from(data);
       payload['type'] ??= 'QUEUE_$eventType';
+      payload['event_type'] = eventType;
+      if (message.notification?.title != null &&
+          message.notification!.title!.isNotEmpty) {
+        payload['notification_title'] ??= message.notification!.title;
+      }
+      if (message.notification?.body != null &&
+          message.notification!.body!.isNotEmpty) {
+        payload['notification_body'] ??= message.notification!.body;
+      }
       notifyQueueEvent(payload);
     }
   }

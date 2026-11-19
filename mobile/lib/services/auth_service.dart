@@ -8,6 +8,7 @@ import '../config/api_config.dart';
 import '../models/auth_tokens.dart';
 import '../models/user.dart';
 import 'push_notification_service.dart';
+import 'queue_realtime_service.dart';
 import 'secure_token_storage.dart';
 
 /// Custom exception thrown during authentication errors with user-friendly messages.
@@ -318,6 +319,7 @@ class AuthService {
   Future<void> logout() async {
     _currentUser = null;
     _pushService.clearAccessToken();
+    QueueRealtimeService.instance.disconnect();
     await _storage.clearTokens();
     debugPrint('[AuthService] Patient logged out locally.');
   }

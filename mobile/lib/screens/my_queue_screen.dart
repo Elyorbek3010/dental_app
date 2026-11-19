@@ -44,6 +44,7 @@ class _MyQueueScreenState extends State<MyQueueScreen> with WidgetsBindingObserv
   late final QueueService _queueService;
   late final PushNotificationService _pushNotificationService;
   late final QueueRealtimeService _realtimeService;
+  final Object _realtimeConsumer = Object();
   StreamSubscription<Map<String, dynamic>>? _queueEventSubscription;
   StreamSubscription<QueueUpdatedEvent>? _realtimeSubscription;
 
@@ -52,6 +53,8 @@ class _MyQueueScreenState extends State<MyQueueScreen> with WidgetsBindingObserv
   bool _isCheckingIn = false;
   bool _isCancelling = false;
   String? _errorMessage;
+  String? _lastForegroundNoticeKey;
+  DateTime? _lastForegroundNoticeAt;
 
   @override
   void initState() {
@@ -71,7 +74,7 @@ class _MyQueueScreenState extends State<MyQueueScreen> with WidgetsBindingObserv
       debugPrint('[MyQueueScreen] App resumed from background, silently refreshing ticket');
       _pushNotificationService.ensureListeners();
       _fetchMyTicket(isSilent: _ticket != null);
-      _connectRealtime();
+      _connectRealtime(forceReconnect: true);
     }
   }
 
@@ -81,6 +84,7 @@ class _MyQueueScreenState extends State<MyQueueScreen> with WidgetsBindingObserv
       (event) {
         if (!mounted) return;
         debugPrint('[MyQueueScreen] Received queue event, refreshing ticket');
+        _showForegroundQueueFeedback(event);
         _fetchMyTicket(isSilent: _ticket != null);
       },
       onError: (Object error) {
@@ -106,9 +110,67 @@ class _MyQueueScreenState extends State<MyQueueScreen> with WidgetsBindingObserv
     );
   }
 
-  void _connectRealtime() {
+  void _showForegroundQueueFeedback(Map<String, dynamic> event) {
+    if (!mounted) return;
+    final eventType =
+        (event['event_type'] ?? PushNotificationService.parseQueueEventType(event))
+            ?.toString()
+            .toUpperCase();
+    if (eventType == null) return;
+
+    final l10n = context.l10n;
+    String? message;
+    Color bgColor = AppTheme.primary;
+
+    switch (eventType) {
+      case 'CALLED':
+        message = l10n.fgNotifCalled;
+        bgColor = AppTheme.warning;
+        break;
+      case 'SKIPPED':
+        message = l10n.fgNotifSkipped;
+        bgColor = AppTheme.warning;
+        break;
+      case 'RESTORED':
+        message = l10n.fgNotifRestored;
+        bgColor = AppTheme.success;
+        break;
+      case 'MISSED_TURN':
+        message = l10n.fgNotifMissedTurn;
+        bgColor = AppTheme.warning;
+        break;
+      default:
+        return;
+    }
+
+    final dedupKey = '$eventType:${event['ticket_id'] ?? event['queue_id'] ?? ''}';
+    final now = DateTime.now();
+    if (_lastForegroundNoticeKey == dedupKey &&
+        _lastForegroundNoticeAt != null &&
+        now.difference(_lastForegroundNoticeAt!) < const Duration(seconds: 5)) {
+      return;
+    }
+    _lastForegroundNoticeKey = dedupKey;
+    _lastForegroundNoticeAt = now;
+
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    messenger?.hideCurrentSnackBar();
+    messenger?.showSnackBar(
+      SnackBar(
+        key: Key('foreground_notif_${eventType.toLowerCase()}'),
+        content: Text(message),
+        backgroundColor: bgColor,
+        duration: const Duration(seconds: 4),
+      ),
+    );
+  }
+
+  void _connectRealtime({bool forceReconnect = false}) {
     final clinicId = _ticket?.clinicId ?? _ticket?.doctor.clinicId ?? ApiConfig.defaultClinicId;
-    _realtimeService.connect(clinicId);
+    if (forceReconnect) {
+      _realtimeService.ensureConnected(clinicId, forceReconnect: true);
+    }
+    _realtimeService.connectForConsumer(_realtimeConsumer, clinicId);
   }
 
   @override
@@ -118,6 +180,7 @@ class _MyQueueScreenState extends State<MyQueueScreen> with WidgetsBindingObserv
     _queueEventSubscription = null;
     _realtimeSubscription?.cancel();
     _realtimeSubscription = null;
+    _realtimeService.disconnectConsumer(_realtimeConsumer);
     super.dispose();
   }
 
@@ -132,6 +195,7 @@ class _MyQueueScreenState extends State<MyQueueScreen> with WidgetsBindingObserv
     }
 
     try {
+      _queueService.setIncludeSkipped(true);
       final ticket = await _queueService.getMyTicket();
       if (mounted) {
         setState(() {
@@ -140,8 +204,8 @@ class _MyQueueScreenState extends State<MyQueueScreen> with WidgetsBindingObserv
         });
         if (ticket != null) {
           final clinicId = ticket.clinicId ?? ticket.doctor.clinicId ?? ApiConfig.defaultClinicId;
-          if (_realtimeService.activeClinicId != clinicId) {
-            _realtimeService.connect(clinicId);
+          if (_realtimeService.activeClinicId != clinicId || !_realtimeService.isConnected) {
+            _realtimeService.connectForConsumer(_realtimeConsumer, clinicId);
           }
         }
       }
@@ -418,7 +482,11 @@ class _MyQueueScreenState extends State<MyQueueScreen> with WidgetsBindingObserv
             // SERVING: in-progress banner
             if (ticket.isServing) _buildServingBanner(l10n),
 
-            if (ticket.isCalled || ticket.isServing) const SizedBox(height: 16),
+            // SKIPPED: skipped banner explaining reception must restore
+            if (ticket.isSkipped) _buildSkippedBanner(l10n),
+
+            if (ticket.isCalled || ticket.isServing || ticket.isSkipped)
+              const SizedBox(height: 16),
 
             _buildTicketCard(ticket, l10n),
             const SizedBox(height: 16),
@@ -432,8 +500,8 @@ class _MyQueueScreenState extends State<MyQueueScreen> with WidgetsBindingObserv
             _buildImportantNotesCard(ticket, l10n),
             const SizedBox(height: 16),
 
-            // Cancel button — only for WAITING or CALLED
-            if (ticket.isWaiting || ticket.isCalled)
+            // Cancel button — allowed for WAITING, CALLED, or SKIPPED
+            if (ticket.isWaiting || ticket.isCalled || ticket.isSkipped)
               _buildCancelButton(l10n),
           ],
         ),
@@ -579,6 +647,55 @@ class _MyQueueScreenState extends State<MyQueueScreen> with WidgetsBindingObserv
   }
 
   // ---------------------------------------------------------------------------
+  // SKIPPED Banner
+  // ---------------------------------------------------------------------------
+
+  Widget _buildSkippedBanner(AppLocalizations l10n) {
+    return Container(
+      key: const Key('skipped_banner'),
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: AppTheme.warning.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppTheme.warning.withValues(alpha: 0.5)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.pause_circle_outline, color: AppTheme.warning, size: 32),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  l10n.skippedBannerTitle,
+                  key: const Key('skipped_banner_title'),
+                  style: const TextStyle(
+                    fontSize: 17,
+                    fontWeight: FontWeight.w800,
+                    color: AppTheme.textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  l10n.skippedBannerSubtitle,
+                  key: const Key('skipped_banner_subtitle'),
+                  style: const TextStyle(
+                    fontSize: 13,
+                    color: AppTheme.textSecondary,
+                    height: 1.35,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ---------------------------------------------------------------------------
   // Ticket Card
   // ---------------------------------------------------------------------------
 
@@ -594,6 +711,10 @@ class _MyQueueScreenState extends State<MyQueueScreen> with WidgetsBindingObserv
       case 'SERVING':
         statusColor = AppTheme.success;
         statusBgColor = AppTheme.success.withValues(alpha: 0.15);
+        break;
+      case 'SKIPPED':
+        statusColor = AppTheme.warning;
+        statusBgColor = AppTheme.warning.withValues(alpha: 0.15);
         break;
       case 'WAITING':
       default:
@@ -682,30 +803,32 @@ class _MyQueueScreenState extends State<MyQueueScreen> with WidgetsBindingObserv
                     letterSpacing: -1.5,
                   ),
                 ),
-                const SizedBox(height: 12),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                  decoration: BoxDecoration(
-                    color: AppTheme.primaryLight,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(Icons.people_outline, color: AppTheme.primary, size: 18),
-                      const SizedBox(width: 8),
-                      Text(
-                        l10n.peopleAhead(ticket.peopleAhead),
-                        key: const Key('my_ticket_people_ahead_text'),
-                        style: const TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w700,
-                          color: AppTheme.primary,
+                if (!ticket.isSkipped) ...[
+                  const SizedBox(height: 12),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: AppTheme.primaryLight,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.people_outline, color: AppTheme.primary, size: 18),
+                        const SizedBox(width: 8),
+                        Text(
+                          l10n.peopleAhead(ticket.peopleAhead),
+                          key: const Key('my_ticket_people_ahead_text'),
+                          style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700,
+                            color: AppTheme.primary,
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
-                ),
+                ],
               ],
             ),
           ),

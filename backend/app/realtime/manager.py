@@ -112,8 +112,14 @@ def notify_display_update(
         loop = asyncio.get_running_loop()
         loop.create_task(_broadcast_both())
     except RuntimeError:
-        # No active event loop in current thread (e.g. standalone synchronous tests)
-        pass
+        # Either called from an AnyIO worker thread (sync FastAPI endpoint)
+        # or standalone synchronous code without an event loop.
+        try:
+            import anyio.from_thread
+
+            anyio.from_thread.run(_broadcast_both)
+        except Exception:
+            pass
     except Exception as exc:
         logger.error(
             "Error scheduling display/queue update for clinic %s: %s",

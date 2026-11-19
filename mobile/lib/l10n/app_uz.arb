@@ -279,5 +279,11 @@
   "errorNoWaitingTicketForClinic": "Ushbu klinika uchun kutilayotgan faol navbat taloni topilmadi.",
   "errorTicketAlreadyCheckedIn": "Ushbu navbat taloni allaqachon ro‘yxatdan o‘tkazilgan.",
   "errorCannotCancelOtherTicket": "Boshqa bemorning navbat talonini bekor qilish taqiqlanadi.",
-  "errorOnlyWaitingCalledCancellable": "Faqat kutilayotgan yoki chaqirilgan talonlar bekor qilinishi mumkin."
+  "errorOnlyWaitingCalledCancellable": "Faqat kutilayotgan yoki chaqirilgan talonlar bekor qilinishi mumkin.",
+  "skippedBannerTitle": "Taloningiz o‘tkazib yuborildi",
+  "skippedBannerSubtitle": "Taloningiz vaqtincha chetlatilgan. Navbatni faqat qabulxona qayta tiklashi mumkin.",
+  "fgNotifCalled": "Navbatingiz keldi! Iltimos, qabulga kiring.",
+  "fgNotifSkipped": "Taloningiz o‘tkazib yuborildi. Qayta tiklash uchun qabulxonaga murojaat qiling.",
+  "fgNotifRestored": "Taloningiz navbatga qayta tiklandi.",
+  "fgNotifMissedTurn": "Navbatingiz o‘tkazildi va navbat oxiriga ko‘chirildi."
 }

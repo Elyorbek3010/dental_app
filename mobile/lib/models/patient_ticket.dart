@@ -173,6 +173,7 @@ class MyQueueTicket {
   bool get isWaiting => status.toUpperCase() == 'WAITING';
   bool get isCalled => status.toUpperCase() == 'CALLED';
   bool get isServing => status.toUpperCase() == 'SERVING';
+  bool get isSkipped => status.toUpperCase() == 'SKIPPED';
   bool get isCheckedIn => checkedInAt != null;
 }
 
@@ -290,6 +291,7 @@ class QueueTicket {
   bool get isWaiting => status.toUpperCase() == 'WAITING';
   bool get isCalled => status.toUpperCase() == 'CALLED';
   bool get isServing => status.toUpperCase() == 'SERVING';
+  bool get isSkipped => status.toUpperCase() == 'SKIPPED';
   bool get isCheckedIn => checkedInAt != null;
 }
 
