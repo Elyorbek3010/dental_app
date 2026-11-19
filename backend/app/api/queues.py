@@ -293,6 +293,9 @@ def get_reception_today_queues(
             func.count(
                 case((QueueTicket.status == TicketStatus.SERVING, QueueTicket.id))
             ).label("serving_count"),
+            func.count(
+                case((QueueTicket.status == TicketStatus.COMPLETED, QueueTicket.id))
+            ).label("completed_count"),
         )
         .join(Doctor, Queue.doctor_id == Doctor.id)
         .join(Specialization, Doctor.specialization_id == Specialization.id)
@@ -330,8 +333,9 @@ def get_reception_today_queues(
             waiting_count=waiting_count,
             called_count=called_count,
             serving_count=serving_count,
+            completed_count=completed_count,
         )
-        for queue, doctor, specialization, waiting_count, called_count, serving_count in results
+        for queue, doctor, specialization, waiting_count, called_count, serving_count, completed_count in results
     ]
 
 

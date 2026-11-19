@@ -67,6 +67,7 @@ export const uzTranslations: TranslationDictionary = {
   totalWaiting: 'Jami kutayotganlar',
   totalCalled: 'Jami chaqirilganlar',
   totalServing: 'Jami qabuldagilar',
+  totalCompleted: 'Jami yakunlanganlar',
   doctorsOverviewTitle: 'Bugungi shifokorlar holati',
   doctorsOverviewSubtitle: 'Shifokorlar ro‘yxati va ularning bugungi navbat holati',
 
@@ -331,6 +332,7 @@ export const ruTranslations: TranslationDictionary = {
   totalWaiting: 'Всего ожидают',
   totalCalled: 'Всего вызваны',
   totalServing: 'Всего на приеме',
+  totalCompleted: 'Всего завершены',
   doctorsOverviewTitle: 'Врачи и статус очереди на сегодня',
   doctorsOverviewSubtitle: 'Список врачей клиники и состояние приема',
 
@@ -595,6 +597,7 @@ export const enTranslations: TranslationDictionary = {
   totalWaiting: 'Total Waiting',
   totalCalled: 'Total Called',
   totalServing: 'Total In Service',
+  totalCompleted: 'Total Completed',
   doctorsOverviewTitle: "Today's Doctors & Queues",
   doctorsOverviewSubtitle: 'List of clinic doctors and their queue statuses',
 
