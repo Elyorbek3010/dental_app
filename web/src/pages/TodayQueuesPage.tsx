@@ -171,7 +171,7 @@ export const TodayQueuesPage: React.FC = () => {
                 </div>
 
                 {/* Counters Row */}
-                <div className="mt-5 grid grid-cols-3 gap-2 rounded-xl bg-zinc-50 p-3 text-center dark:bg-zinc-800/50">
+                <div className="mt-5 grid grid-cols-4 gap-2 rounded-xl bg-zinc-50 p-3 text-center dark:bg-zinc-800/50">
                   <div>
                     <div className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">
                       {t.waitingCount}
@@ -194,6 +194,14 @@ export const TodayQueuesPage: React.FC = () => {
                     </div>
                     <div className="mt-1 text-lg font-black text-emerald-600 dark:text-emerald-400">
                       {q.serving_count}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">
+                      {t.completedCount}
+                    </div>
+                    <div className="mt-1 text-lg font-black text-zinc-700 dark:text-zinc-200">
+                      {q.completed_count ?? 0}
                     </div>
                   </div>
                 </div>

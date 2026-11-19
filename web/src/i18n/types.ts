@@ -67,6 +67,7 @@ export interface TranslationDictionary {
   totalWaiting: string;
   totalCalled: string;
   totalServing: string;
+  totalCompleted: string;
   doctorsOverviewTitle: string;
   doctorsOverviewSubtitle: string;
 

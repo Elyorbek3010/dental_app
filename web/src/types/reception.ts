@@ -46,6 +46,7 @@ export interface ReceptionQueueOverview {
   waiting_count: number;
   called_count: number;
   serving_count: number;
+  completed_count: number;
 }
 
 export interface QueueTicket {

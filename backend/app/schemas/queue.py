@@ -129,6 +129,7 @@ class ReceptionQueueOverviewResponse(BaseModel):
     waiting_count: int
     called_count: int
     serving_count: int
+    completed_count: int = 0
 
     model_config = ConfigDict(from_attributes=True)
 

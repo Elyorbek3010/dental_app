@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   Activity,
   AlertCircle,
+  CheckCircle2,
   Clock,
   DoorClosed,
   PlayCircle,
@@ -132,6 +133,7 @@ export const DashboardOverviewPage: React.FC = () => {
   const totalWaiting = todayQueues.reduce((sum, q) => sum + q.waiting_count, 0);
   const totalCalled = todayQueues.reduce((sum, q) => sum + q.called_count, 0);
   const totalServing = todayQueues.reduce((sum, q) => sum + q.serving_count, 0);
+  const totalCompleted = todayQueues.reduce((sum, q) => sum + (q.completed_count ?? 0), 0);
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
@@ -154,7 +156,7 @@ export const DashboardOverviewPage: React.FC = () => {
       )}
 
       {/* KPI Cards Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         {/* Total Active Queues */}
         <div className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-2xs dark:border-zinc-800 dark:bg-zinc-900">
           <div className="flex items-center justify-between">
@@ -225,6 +227,23 @@ export const DashboardOverviewPage: React.FC = () => {
             </span>
           </div>
         </div>
+
+        {/* Total Completed */}
+        <div className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-2xs dark:border-zinc-800 dark:bg-zinc-900">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+              {t.totalCompleted}
+            </span>
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">
+              <CheckCircle2 className="h-5 w-5" />
+            </div>
+          </div>
+          <div className="mt-3">
+            <span className="text-2xl font-black text-zinc-800 dark:text-zinc-100">
+              {totalCompleted}
+            </span>
+          </div>
+        </div>
       </div>
 
       {/* Today's Doctors & Queues Table */}
@@ -269,6 +288,9 @@ export const DashboardOverviewPage: React.FC = () => {
                   </th>
                   <th scope="col" className="px-6 py-3.5 text-center">
                     {t.waitingCount}
+                  </th>
+                  <th scope="col" className="px-6 py-3.5 text-center">
+                    {t.completedCount}
                   </th>
                   <th scope="col" className="px-6 py-3.5 text-right">
                     {t.actions}
@@ -323,6 +345,17 @@ export const DashboardOverviewPage: React.FC = () => {
                         {queue ? (
                           <span className="inline-flex items-center justify-center rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-bold text-blue-700 dark:bg-blue-950/50 dark:text-blue-300">
                             {queue.waiting_count}
+                          </span>
+                        ) : (
+                          <span className="text-xs text-zinc-400">—</span>
+                        )}
+                      </td>
+
+                      {/* Completed Count */}
+                      <td className="px-6 py-4 whitespace-nowrap text-center">
+                        {queue ? (
+                          <span className="inline-flex items-center justify-center rounded-full bg-zinc-100 px-2.5 py-0.5 text-xs font-bold text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
+                            {queue.completed_count ?? 0}
                           </span>
                         ) : (
                           <span className="text-xs text-zinc-400">—</span>

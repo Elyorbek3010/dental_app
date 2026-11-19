@@ -181,8 +181,9 @@ export const QueueManagementPage: React.FC = () => {
   const waitingTickets = tickets
     .filter((t) => t.status === 'WAITING')
     .sort((a, b) => a.queue_position - b.queue_position);
+  const completedTickets = tickets.filter((t) => t.status === 'COMPLETED');
   const inactiveTickets = tickets.filter(
-    (t) => t.status === 'COMPLETED' || t.status === 'SKIPPED' || t.status === 'CANCELLED'
+    (t) => t.status === 'SKIPPED' || t.status === 'CANCELLED'
   );
 
   // Actions
@@ -568,6 +569,9 @@ export const QueueManagementPage: React.FC = () => {
             <span className="text-zinc-500">
               {t.waitingCount}: <b className="text-zinc-900 dark:text-zinc-100">{waitingTickets.length}</b>
             </span>
+            <span className="text-zinc-500">
+              {t.completedCount}: <b className="text-zinc-900 dark:text-zinc-100">{completedTickets.length}</b>
+            </span>
           </div>
         </div>
       )}
@@ -949,7 +953,49 @@ export const QueueManagementPage: React.FC = () => {
         )}
       </div>
 
-      {/* Inactive / Completed / Skipped Section */}
+      {/* Completed Patients Section */}
+      {completedTickets.length > 0 && (
+        <div className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-2xs dark:border-zinc-800 dark:bg-zinc-900">
+          <div className="flex items-center justify-between border-b border-zinc-100 pb-3 dark:border-zinc-800">
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+              <span className="font-bold text-xs uppercase tracking-wider text-zinc-700 dark:text-zinc-300">
+                {t.completedCount} ({completedTickets.length})
+              </span>
+            </div>
+          </div>
+
+          <div className="mt-3 divide-y divide-zinc-100 dark:divide-zinc-800">
+            {completedTickets.map((ticket) => (
+              <div
+                key={ticket.id}
+                className="py-3 flex items-center justify-between gap-3 text-xs"
+              >
+                <div className="flex items-center gap-3">
+                  <span className="font-black text-zinc-500">
+                    #{ticket.ticket_number}
+                  </span>
+                  <span className="font-semibold text-zinc-800 dark:text-zinc-200">
+                    {ticket.patient_name}
+                  </span>
+                  <span
+                    className={`rounded-md px-2 py-0.5 text-[10px] font-bold uppercase ${
+                      ticket.source === 'ONLINE'
+                        ? 'bg-sky-50 text-sky-700 dark:bg-sky-950/50 dark:text-sky-300'
+                        : 'bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300'
+                    }`}
+                  >
+                    {ticket.source === 'ONLINE' ? t.sourceOnline : t.sourceWalkIn}
+                  </span>
+                  <StatusBadge status={ticket.status} size="sm" />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Inactive / Skipped / Cancelled Section */}
       {inactiveTickets.length > 0 && (
         <details className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-2xs dark:border-zinc-800 dark:bg-zinc-900 group">
           <summary className="flex items-center justify-between cursor-pointer list-none font-bold text-xs uppercase tracking-wider text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200">
