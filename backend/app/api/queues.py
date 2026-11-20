@@ -11,7 +11,7 @@ from app.core.config import settings
 from app.core.security import create_check_in_qr_token, decode_check_in_qr_token
 from app.models.clinic import Clinic
 from app.models.doctor import Doctor
-from app.models.queue import Queue
+from app.models.queue import Queue, SmartCallMode
 from app.models.queue_ticket import CheckInMethod, QueueTicket, TicketSource, TicketStatus
 from app.models.specialization import Specialization
 from app.models.user import User, UserRole
@@ -29,6 +29,7 @@ from app.services.queue_notifications import (
     trigger_missed_turn_notification,
 )
 from app.services.smart_call_timer import (
+    SmartCallAdvanceResult,
     advance_smart_call_for_queue,
     clear_ticket_call_countdown,
     freeze_ticket_call_countdown,
@@ -38,6 +39,7 @@ from app.services.smart_call_timer import (
 )
 from app.schemas.queue import (
     CheckInQRResponse,
+    CompleteTicketResponse,
     MyQueueTicketResponse,
     MyTicketDoctorResponse,
     MyTicketSpecializationResponse,
@@ -49,6 +51,7 @@ from app.schemas.queue import (
     ReceptionQueueDoctorResponse,
     ReceptionQueueOverviewResponse,
     ReceptionQueueSpecializationResponse,
+    SmartCallModeUpdateRequest,
     WalkInPatientCreate,
 )
 
@@ -355,6 +358,7 @@ def open_today_queue(
         queue_date=target_date,
         is_paused=False,
         is_active=True,
+        smart_call_mode=SmartCallMode.MANUAL,
     )
     db.add(new_queue)
     try:
@@ -439,6 +443,7 @@ def get_reception_today_queues(
             queue_date=queue.queue_date,
             is_paused=queue.is_paused,
             is_active=queue.is_active,
+            smart_call_mode=queue.smart_call_mode,
             doctor=ReceptionQueueDoctorResponse(
                 id=doctor.id,
                 full_name=doctor.full_name,
@@ -1086,18 +1091,13 @@ def serve_patient(
     return ticket
 
 
-@router.patch(
-    "/{queue_id}/tickets/{ticket_id}/complete",
-    response_model=QueueTicketResponse,
-)
-def complete_patient(
+def _get_locked_queue_and_doctor_for_staff(
+    db: Session,
     queue_id: int,
-    ticket_id: int,
-    background_tasks: BackgroundTasks = None,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles(UserRole.RECEPTIONIST, UserRole.ADMIN)),
-) -> QueueTicket:
-    queue = db.scalar(select(Queue).where(Queue.id == queue_id))
+    current_user: User,
+) -> tuple[Queue, Doctor]:
+    """Fetch a row-locked queue and doctor, enforcing clinic authorization for receptionists."""
+    queue = db.scalar(select(Queue).where(Queue.id == queue_id).with_for_update())
     if not queue:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -1123,6 +1123,50 @@ def complete_patient(
                 detail="Cannot access another clinic's queue",
             )
 
+    return queue, doctor
+
+
+@router.patch(
+    "/{queue_id}/smart-call-mode",
+    response_model=QueueResponse,
+)
+def update_queue_smart_call_mode(
+    queue_id: int,
+    payload: SmartCallModeUpdateRequest,
+    background_tasks: BackgroundTasks = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles(UserRole.RECEPTIONIST, UserRole.ADMIN)),
+) -> Queue:
+    queue, doctor = _get_locked_queue_and_doctor_for_staff(db, queue_id, current_user)
+
+    if not queue.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Queue is inactive",
+        )
+
+    if queue.smart_call_mode != payload.mode:
+        queue.smart_call_mode = payload.mode
+        db.commit()
+        db.refresh(queue)
+        notify_display_update(doctor.clinic_id, background_tasks, queue_id=queue.id)
+
+    return queue
+
+
+@router.patch(
+    "/{queue_id}/tickets/{ticket_id}/complete",
+    response_model=CompleteTicketResponse,
+)
+def complete_patient(
+    queue_id: int,
+    ticket_id: int,
+    background_tasks: BackgroundTasks = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles(UserRole.RECEPTIONIST, UserRole.ADMIN)),
+) -> CompleteTicketResponse:
+    queue, doctor = _get_locked_queue_and_doctor_for_staff(db, queue_id, current_user)
+
     ticket = db.scalar(
         select(QueueTicket).where(
             QueueTicket.id == ticket_id,
@@ -1142,13 +1186,50 @@ def complete_patient(
         )
 
     ticket.status = TicketStatus.COMPLETED
+    # Flush COMPLETED transition before checking active tickets or running Smart Call advance
+    db.flush()
+
+    advance_result = SmartCallAdvanceResult()
+    if (
+        queue.smart_call_mode == SmartCallMode.AUTOMATIC
+        and queue.is_active
+        and not queue.is_paused
+    ):
+        remaining_active = db.scalar(
+            select(QueueTicket.id)
+            .where(
+                QueueTicket.queue_id == queue.id,
+                QueueTicket.status.in_([TicketStatus.CALLED, TicketStatus.SERVING]),
+            )
+            .limit(1)
+        )
+        if remaining_active is None:
+            timeout_seconds = get_clinic_timeout_seconds(db, doctor.clinic_id)
+            advance_result = advance_smart_call_for_queue(
+                db,
+                queue.id,
+                timeout_seconds,
+            )
+
+    auto_called_ticket = advance_result.called_ticket
     db.commit()
     db.refresh(ticket)
+    if auto_called_ticket is not None:
+        db.refresh(auto_called_ticket)
+
     notify_display_update(doctor.clinic_id, background_tasks, queue_id=queue.id)
     if ticket.patient_id is not None:
         schedule_completed_notification(ticket.id, background_tasks)
+    for passed_id in advance_result.passed_ticket_ids:
+        schedule_missed_turn_notification(passed_id, background_tasks)
+    if auto_called_ticket is not None and auto_called_ticket.patient_id is not None:
+        schedule_called_notification(auto_called_ticket.id, doctor.room_number, background_tasks)
     schedule_approaching_check(queue.id, background_tasks)
-    return ticket
+
+    response = CompleteTicketResponse.model_validate(ticket)
+    if auto_called_ticket is not None:
+        response.auto_called_ticket = QueueTicketResponse.model_validate(auto_called_ticket)
+    return response
 
 
 @router.patch(

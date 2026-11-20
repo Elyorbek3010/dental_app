@@ -34,10 +34,11 @@ import {
   restorePatient,
   servePatient,
   skipPatient,
+  updateSmartCallMode,
 } from '../api/reception';
 import { useI18n } from '../i18n/useI18n';
 import { useSmartCallCountdown } from '../hooks/useSmartCallCountdown';
-import type { QueueTicket, ReceptionQueueOverview } from '../types/reception';
+import type { QueueTicket, ReceptionQueueOverview, SmartCallMode } from '../types/reception';
 import { AlertBanner } from '../components/common/AlertBanner';
 import { AppButton } from '../components/common/AppButton';
 import { ConfirmModal } from '../components/common/ConfirmModal';
@@ -287,12 +288,44 @@ export const QueueManagementPage: React.FC = () => {
     setActionInProgress(`complete-${ticket.id}`);
     setNotice(null);
     try {
-      await completePatient(selectedQueueId, ticket.id);
+      const completed = await completePatient(selectedQueueId, ticket.id);
+      const baseMsg = `${t.statusCompleted}: #${ticket.ticket_number} - ${ticket.patient_name}`;
+      const nextMsg = completed.auto_called_ticket
+        ? ` • ${t.autoCalledNextSuffix}: #${completed.auto_called_ticket.ticket_number} - ${completed.auto_called_ticket.patient_name}`
+        : '';
       setNotice({
         type: 'success',
-        message: `${t.statusCompleted}: #${ticket.ticket_number} - ${ticket.patient_name}`,
+        message: `${baseMsg}${nextMsg}`,
       });
       await Promise.all([loadTickets(selectedQueueId, true), loadQueuesList()]);
+    } catch (err) {
+      setNotice({ type: 'error', message: parseBackendError(err) });
+    } finally {
+      setActionInProgress(null);
+    }
+  };
+
+  const handleSmartCallModeChange = async (mode: SmartCallMode) => {
+    if (!activeQueue || activeQueue.smart_call_mode === mode) return;
+    setActionInProgress(`mode-${mode}`);
+    setNotice(null);
+    try {
+      const updated = await updateSmartCallMode(activeQueue.queue_id, mode);
+      setTodayQueues((prev) =>
+        prev.map((q) =>
+          q.queue_id === updated.id
+            ? { ...q, smart_call_mode: updated.smart_call_mode }
+            : q
+        )
+      );
+      setNotice({
+        type: 'success',
+        message:
+          updated.smart_call_mode === 'AUTOMATIC'
+            ? t.smartCallModeAutoNotice
+            : t.smartCallModeManualNotice,
+      });
+      await loadQueuesList();
     } catch (err) {
       setNotice({ type: 'error', message: parseBackendError(err) });
     } finally {
@@ -484,6 +517,17 @@ export const QueueManagementPage: React.FC = () => {
                 }`}
               >
                 <span>{q.doctor.full_name}</span>
+                {q.smart_call_mode === 'AUTOMATIC' && (
+                  <span
+                    className={`px-1.5 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wide ${
+                      isSelected
+                        ? 'bg-white/25 text-white dark:bg-[#0B1728]/30 dark:text-[#07131D]'
+                        : 'bg-[#E0F2FE] text-[#0369A1] dark:bg-[#10324F] dark:text-[#38BDF8]'
+                    }`}
+                  >
+                    AUTO
+                  </span>
+                )}
                 <span
                   className={`px-1.5 py-0.5 rounded-md text-[10px] font-bold tabular-nums ${
                     isSelected
@@ -1031,8 +1075,51 @@ export const QueueManagementPage: React.FC = () => {
             )}
           </div>
 
-          {/* Pinned Bottom Primary CTA: Smart Call Next */}
-          <div className="shrink-0 p-3 border-t border-[#DCE9EE] bg-[#F5FAFB]/80 dark:border-[#253F5B] dark:bg-[#0B1728]/60">
+          {/* Pinned Bottom Primary CTA: Smart Call Mode Switch + Call Next */}
+          <div className="shrink-0 p-3 space-y-2 border-t border-[#DCE9EE] bg-[#F5FAFB]/80 dark:border-[#253F5B] dark:bg-[#0B1728]/60">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2 min-w-0">
+                <span
+                  className={`h-2 w-2 rounded-full shrink-0 ${
+                    activeQueue?.smart_call_mode === 'AUTOMATIC'
+                      ? 'bg-[#0D9488] dark:bg-[#2DD4BF] animate-pulse'
+                      : 'bg-[#94A3B8] dark:bg-[#64748B]'
+                  }`}
+                />
+                <span className="text-xs font-semibold text-[#14283F] dark:text-[#F1F5F9] truncate">
+                  {t.smartCallMode}
+                </span>
+              </div>
+
+              <div
+                role="group"
+                aria-label={t.smartCallMode}
+                className="inline-flex items-center rounded-xl border border-[#DCE9EE] bg-white p-0.5 dark:border-[#253F5B] dark:bg-[#12243A]"
+              >
+                {(['AUTOMATIC', 'MANUAL'] as const).map((modeOption) => {
+                  const isModeActive = (activeQueue?.smart_call_mode ?? 'MANUAL') === modeOption;
+                  return (
+                    <button
+                      key={modeOption}
+                      type="button"
+                      disabled={!activeQueue || actionInProgress !== null}
+                      aria-pressed={isModeActive}
+                      onClick={() => handleSmartCallModeChange(modeOption)}
+                      className={`rounded-lg px-2.5 py-1 text-[11px] font-bold transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
+                        isModeActive
+                          ? modeOption === 'AUTOMATIC'
+                            ? 'bg-[#0D9488] text-white shadow-2xs dark:bg-[#14B8A6] dark:text-[#07131D]'
+                            : 'bg-[#14283F] text-white shadow-2xs dark:bg-[#F1F5F9] dark:text-[#07131D]'
+                          : 'text-[#64748B] hover:text-[#14283F] dark:text-[#A5B4C7] dark:hover:text-[#F1F5F9]'
+                      }`}
+                    >
+                      {modeOption === 'AUTOMATIC' ? t.smartCallModeAutomatic : t.smartCallModeManual}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
             <AppButton
               variant="primary"
               size="md"

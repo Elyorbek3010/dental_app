@@ -10,6 +10,8 @@ export type TicketSource = 'ONLINE' | 'WALK_IN';
 
 export type CheckInMethod = 'QR' | 'RECEPTION' | 'WALK_IN';
 
+export type SmartCallMode = 'MANUAL' | 'AUTOMATIC';
+
 export interface Doctor {
   id: number;
   clinic_id: number;
@@ -41,6 +43,7 @@ export interface ReceptionQueueOverview {
   queue_date: string;
   is_paused: boolean;
   is_active: boolean;
+  smart_call_mode: SmartCallMode;
   doctor: ReceptionQueueDoctor;
   specialization: ReceptionQueueSpecialization;
   waiting_count: number;
@@ -69,6 +72,10 @@ export interface QueueTicket {
   server_time?: string | null;
 }
 
+export interface CompleteQueueTicketResponse extends QueueTicket {
+  auto_called_ticket?: QueueTicket | null;
+}
+
 export interface WalkInPatientCreate {
   patient_name: string;
   patient_phone?: string | null;
@@ -86,6 +93,7 @@ export interface QueueResponse {
   queue_date: string;
   is_paused: boolean;
   is_active: boolean;
+  smart_call_mode: SmartCallMode;
 }
 
 export interface CheckInQRResponse {

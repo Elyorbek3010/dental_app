@@ -11,7 +11,7 @@ from app.core.security import create_access_token
 from app.main import app
 from app.models.clinic import Clinic
 from app.models.doctor import Doctor
-from app.models.queue import Queue
+from app.models.queue import Queue, SmartCallMode
 from app.models.queue_ticket import CheckInMethod, QueueTicket, TicketSource, TicketStatus
 from app.models.specialization import Specialization
 from app.models.user import User, UserRole
@@ -152,13 +152,21 @@ class SmartCallTimerTest(unittest.TestCase):
                 db.execute(delete(Queue).where(Queue.id.in_(q_ids)))
             db.commit()
 
-    def _create_queue(self, doctor: Doctor, *, is_active: bool = True, is_paused: bool = False) -> Queue:
+    def _create_queue(
+        self,
+        doctor: Doctor,
+        *,
+        is_active: bool = True,
+        is_paused: bool = False,
+        smart_call_mode: SmartCallMode = SmartCallMode.MANUAL,
+    ) -> Queue:
         with SessionLocal() as db:
             q = Queue(
                 doctor_id=doctor.id,
                 queue_date=date.today(),
                 is_active=is_active,
                 is_paused=is_paused,
+                smart_call_mode=smart_call_mode,
             )
             db.add(q)
             db.commit()
@@ -302,7 +310,7 @@ class SmartCallTimerTest(unittest.TestCase):
             json={"smart_call_timeout_seconds": 30},
             headers=self.admin1_headers,
         )
-        queue = self._create_queue(self.doctor1)
+        queue = self._create_queue(self.doctor1, smart_call_mode=SmartCallMode.AUTOMATIC)
         now = datetime.now(timezone.utc)
         t1 = self._add_ticket(
             queue.id,
@@ -353,7 +361,7 @@ class SmartCallTimerTest(unittest.TestCase):
             self.assertEqual(db_t2.missed_turns, 1)
 
     def test_04_expired_with_no_checked_in_waiting_leaves_queue_idle(self):
-        queue = self._create_queue(self.doctor1)
+        queue = self._create_queue(self.doctor1, smart_call_mode=SmartCallMode.AUTOMATIC)
         now = datetime.now(timezone.utc)
         t1 = self._add_ticket(
             queue.id,
@@ -407,7 +415,7 @@ class SmartCallTimerTest(unittest.TestCase):
             json={"smart_call_timeout_seconds": 60},
             headers=self.admin1_headers,
         )
-        queue = self._create_queue(self.doctor1)
+        queue = self._create_queue(self.doctor1, smart_call_mode=SmartCallMode.AUTOMATIC)
         t1 = self._add_ticket(queue.id, 1, patient=self.p1, checked_in=True)
         t2 = self._add_ticket(queue.id, 2, patient=self.p2, checked_in=True)
 
@@ -493,7 +501,7 @@ class SmartCallTimerTest(unittest.TestCase):
         self.assertEqual(process_expired_called_tickets(now=now + timedelta(minutes=10)), [])
 
     def test_07_pause_freezes_and_resume_restores_countdown(self):
-        queue = self._create_queue(self.doctor1)
+        queue = self._create_queue(self.doctor1, smart_call_mode=SmartCallMode.AUTOMATIC)
         now = datetime.now(timezone.utc)
         t1 = self._add_ticket(
             queue.id,
@@ -622,7 +630,7 @@ class SmartCallTimerTest(unittest.TestCase):
             self.assertEqual(db.scalar(select(QueueTicket.status).where(QueueTicket.id == t_other.id)), TicketStatus.CALLED)
 
     def test_09_concurrency_parallel_sweep_and_serve_race_safe(self):
-        queue = self._create_queue(self.doctor1)
+        queue = self._create_queue(self.doctor1, smart_call_mode=SmartCallMode.AUTOMATIC)
         now = datetime.now(timezone.utc)
         t1 = self._add_ticket(
             queue.id,

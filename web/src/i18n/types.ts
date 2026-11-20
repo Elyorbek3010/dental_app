@@ -93,6 +93,12 @@ export interface TranslationDictionary {
   inactivePatients: string;
   smartCall: string;
   smartCalling: string;
+  smartCallMode: string;
+  smartCallModeAutomatic: string;
+  smartCallModeManual: string;
+  smartCallModeAutoNotice: string;
+  smartCallModeManualNotice: string;
+  autoCalledNextSuffix: string;
   manualCall: string;
   addWalkIn: string;
   callAgain: string;
