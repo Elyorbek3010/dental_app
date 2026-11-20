@@ -317,7 +317,14 @@ void main() {
       Map<String, dynamic>? currentBackendTicket = waitingTicketJson;
 
       final mockQueueClient = MockClient((request) async {
-        if (request.url.path.contains('/api/queues/my-ticket')) {
+        if (request.url.path == '/api/queues/my-tickets') {
+          fetchCount++;
+          return http.Response(
+            jsonEncode(currentBackendTicket != null ? [currentBackendTicket] : []),
+            200,
+          );
+        }
+        if (request.url.path == '/api/queues/my-ticket') {
           fetchCount++;
           if (currentBackendTicket != null) {
             return http.Response(jsonEncode(currentBackendTicket), 200);
@@ -394,7 +401,14 @@ void main() {
       Map<String, dynamic>? currentBackendTicket = calledTicketJson;
 
       final mockQueueClient = MockClient((request) async {
-        if (request.url.path.contains('/api/queues/my-ticket')) {
+        if (request.url.path == '/api/queues/my-tickets') {
+          fetchCount++;
+          return http.Response(
+            jsonEncode(currentBackendTicket != null ? [currentBackendTicket] : []),
+            200,
+          );
+        }
+        if (request.url.path == '/api/queues/my-ticket') {
           fetchCount++;
           if (currentBackendTicket != null) {
             return http.Response(jsonEncode(currentBackendTicket), 200);
@@ -455,7 +469,11 @@ void main() {
       Map<String, dynamic> currentTicket = Map.from(waitingTicketJson)..['people_ahead'] = 4;
 
       final mockQueueClient = MockClient((request) async {
-        if (request.url.path.contains('/api/queues/my-ticket')) {
+        if (request.url.path == '/api/queues/my-tickets') {
+          fetchCount++;
+          return http.Response(jsonEncode([currentTicket]), 200);
+        }
+        if (request.url.path == '/api/queues/my-ticket') {
           fetchCount++;
           return http.Response(jsonEncode(currentTicket), 200);
         }
@@ -518,7 +536,11 @@ void main() {
       int fetchCount = 0;
 
       final mockQueueClient = MockClient((request) async {
-        if (request.url.path.contains('/api/queues/my-ticket')) {
+        if (request.url.path == '/api/queues/my-tickets') {
+          fetchCount++;
+          return http.Response(jsonEncode([waitingTicketJson]), 200);
+        }
+        if (request.url.path == '/api/queues/my-ticket') {
           fetchCount++;
           return http.Response(jsonEncode(waitingTicketJson), 200);
         }
@@ -570,7 +592,11 @@ void main() {
       int fetchCount = 0;
 
       final mockQueueClient = MockClient((request) async {
-        if (request.url.path.contains('/api/queues/my-ticket')) {
+        if (request.url.path == '/api/queues/my-tickets') {
+          fetchCount++;
+          return http.Response(jsonEncode([waitingTicketJson]), 200);
+        }
+        if (request.url.path == '/api/queues/my-ticket') {
           fetchCount++;
           return http.Response(jsonEncode(waitingTicketJson), 200);
         }
@@ -612,7 +638,11 @@ void main() {
       int fetchCount = 0;
 
       final mockQueueClient = MockClient((request) async {
-        if (request.url.path.contains('/api/queues/my-ticket')) {
+        if (request.url.path == '/api/queues/my-tickets') {
+          fetchCount++;
+          return http.Response(jsonEncode([waitingTicketJson]), 200);
+        }
+        if (request.url.path == '/api/queues/my-ticket') {
           fetchCount++;
           return http.Response(jsonEncode(waitingTicketJson), 200);
         }

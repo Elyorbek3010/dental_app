@@ -30,32 +30,55 @@ class MyQueueScreen extends StatefulWidget {
     this.queueService,
     this.pushNotificationService,
     this.realtimeService,
+    this.nowProvider,
   });
 
   final QueueService? queueService;
   final PushNotificationService? pushNotificationService;
   final QueueRealtimeService? realtimeService;
+  final DateTime Function()? nowProvider;
 
   @override
   State<MyQueueScreen> createState() => _MyQueueScreenState();
 }
 
 class _MyQueueScreenState extends State<MyQueueScreen> with WidgetsBindingObserver {
+  static const List<int> _expiryRetryDelaysSeconds = <int>[2, 3, 5];
+
   late final QueueService _queueService;
   late final PushNotificationService _pushNotificationService;
   late final QueueRealtimeService _realtimeService;
   final Object _realtimeConsumer = Object();
   StreamSubscription<Map<String, dynamic>>? _queueEventSubscription;
   StreamSubscription<QueueUpdatedEvent>? _realtimeSubscription;
+  StreamSubscription<bool>? _connectionStateSubscription;
+  StreamSubscription<int>? _reconnectedSubscription;
   Timer? _countdownTimer;
+  Timer? _recoveryRetryTimer;
 
-  MyQueueTicket? _ticket;
+  List<MyQueueTicket> _tickets = [];
   bool _isLoading = true;
-  bool _isCheckingIn = false;
-  bool _isCancelling = false;
+  int? _checkingInTicketId;
+  int? _cancellingTicketId;
   String? _errorMessage;
   String? _lastForegroundNoticeKey;
   DateTime? _lastForegroundNoticeAt;
+
+  // Request sequencing and coalescing for concurrent WS/FCM/manual refreshes
+  int _latestFetchSeq = 0;
+  int? _activeSilentFetchSeq;
+  bool _queuedSilentRefresh = false;
+
+  // Sync / connectivity degradation state
+  bool _isHttpSyncDegraded = false;
+  bool _isRealtimeDegraded = false;
+  bool get _showSyncWarning =>
+      _tickets.isNotEmpty && (_isHttpSyncDegraded || _isRealtimeDegraded);
+
+  // Per-ticket bounded countdown expiry recovery state
+  final Map<int, DateTime> _trackedDeadlines = <int, DateTime>{};
+  final Map<int, int> _expiryAttempts = <int, int>{};
+  final Map<int, int> _expiryTicksRemaining = <int, int>{};
 
   @override
   void initState() {
@@ -65,16 +88,16 @@ class _MyQueueScreenState extends State<MyQueueScreen> with WidgetsBindingObserv
     _pushNotificationService =
         widget.pushNotificationService ?? PushNotificationService.instance;
     _realtimeService = widget.realtimeService ?? QueueRealtimeService.instance;
-    _fetchMyTicket();
+    _fetchMyTickets();
     _subscribeToQueueEvents();
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
-      debugPrint('[MyQueueScreen] App resumed from background, silently refreshing ticket');
+      debugPrint('[MyQueueScreen] App resumed from background, silently refreshing tickets');
       _pushNotificationService.ensureListeners();
-      _fetchMyTicket(isSilent: _ticket != null);
+      unawaited(_fetchMyTickets(isSilent: _tickets.isNotEmpty, bypassCoalescing: true));
       _connectRealtime(forceReconnect: true);
     }
   }
@@ -84,9 +107,9 @@ class _MyQueueScreenState extends State<MyQueueScreen> with WidgetsBindingObserv
     _queueEventSubscription = _pushNotificationService.queueEvents.listen(
       (event) {
         if (!mounted) return;
-        debugPrint('[MyQueueScreen] Received queue event, refreshing ticket');
+        debugPrint('[MyQueueScreen] Received queue event, refreshing tickets');
         _showForegroundQueueFeedback(event);
-        _fetchMyTicket(isSilent: _ticket != null);
+        unawaited(_fetchMyTickets(isSilent: _tickets.isNotEmpty));
       },
       onError: (Object error) {
         debugPrint('[MyQueueScreen] Error in queue event subscription: $error');
@@ -97,16 +120,40 @@ class _MyQueueScreenState extends State<MyQueueScreen> with WidgetsBindingObserv
     _realtimeSubscription = _realtimeService.events.listen(
       (event) {
         if (!mounted) return;
-        // Trigger refetch if event matches current queue, current queue was null, or clinic-wide
+        // Trigger refetch if event matches any active queue, list was empty, or clinic-wide
         if (event.queueId == null ||
-            _ticket == null ||
-            event.queueId == _ticket!.queueId) {
-          debugPrint('[MyQueueScreen] Received WebSocket queue update, refreshing ticket');
-          _fetchMyTicket(isSilent: _ticket != null);
+            _tickets.isEmpty ||
+            _tickets.any((t) => t.queueId == event.queueId)) {
+          debugPrint('[MyQueueScreen] Received WebSocket queue update, refreshing tickets');
+          unawaited(_fetchMyTickets(isSilent: _tickets.isNotEmpty));
         }
       },
       onError: (Object error) {
         debugPrint('[MyQueueScreen] Realtime WebSocket error: $error');
+      },
+    );
+
+    _connectionStateSubscription = _realtimeService.connectionStates.listen(
+      (isHealthy) {
+        if (!mounted) return;
+        if (!isHealthy) {
+          if (_tickets.isNotEmpty && !_isRealtimeDegraded) {
+            setState(() => _isRealtimeDegraded = true);
+          }
+        } else if (_isRealtimeDegraded) {
+          setState(() => _isRealtimeDegraded = false);
+        }
+      },
+    );
+
+    _reconnectedSubscription = _realtimeService.onReconnected.listen(
+      (_) {
+        if (!mounted) return;
+        debugPrint('[MyQueueScreen] WebSocket reconnected, refreshing tickets');
+        if (_isRealtimeDegraded) {
+          setState(() => _isRealtimeDegraded = false);
+        }
+        unawaited(_fetchMyTickets(isSilent: _tickets.isNotEmpty, bypassCoalescing: true));
       },
     );
   }
@@ -167,20 +214,101 @@ class _MyQueueScreenState extends State<MyQueueScreen> with WidgetsBindingObserv
   }
 
   void _connectRealtime({bool forceReconnect = false}) {
-    final clinicId = _ticket?.clinicId ?? _ticket?.doctor.clinicId ?? ApiConfig.defaultClinicId;
+    final firstTicket = _tickets.isNotEmpty ? _tickets.first : null;
+    final clinicId =
+        firstTicket?.clinicId ?? firstTicket?.doctor.clinicId ?? ApiConfig.defaultClinicId;
     if (forceReconnect) {
       _realtimeService.ensureConnected(clinicId, forceReconnect: true);
     }
     _realtimeService.connectForConsumer(_realtimeConsumer, clinicId);
   }
 
+  DateTime _utcNow() => widget.nowProvider?.call() ?? DateTime.now().toUtc();
+
+  void _clearExpiryTracking() {
+    _trackedDeadlines.clear();
+    _expiryAttempts.clear();
+    _expiryTicksRemaining.clear();
+  }
+
+  void _reconcileExpiryTracking(List<MyQueueTicket> tickets) {
+    final activeCalledIds = <int>{};
+    for (final ticket in tickets) {
+      final canCountDown = ticket.isCalled &&
+          !ticket.isQueuePaused &&
+          ticket.pausedRemainingSeconds == null &&
+          ticket.callDeadlineAt != null;
+      if (!canCountDown) continue;
+
+      activeCalledIds.add(ticket.id);
+      final deadlineUtc = ticket.callDeadlineAt!.toUtc();
+      final prevDeadline = _trackedDeadlines[ticket.id];
+      if (prevDeadline == null || prevDeadline != deadlineUtc) {
+        _trackedDeadlines[ticket.id] = deadlineUtc;
+        _expiryAttempts[ticket.id] = 0;
+        _expiryTicksRemaining.remove(ticket.id);
+      }
+    }
+
+    _trackedDeadlines.removeWhere((id, _) => !activeCalledIds.contains(id));
+    _expiryAttempts.removeWhere((id, _) => !activeCalledIds.contains(id));
+    _expiryTicksRemaining.removeWhere((id, _) => !activeCalledIds.contains(id));
+  }
+
+  void _checkAndScheduleExpiredTickets({required bool decrementTicks}) {
+    bool shouldRefresh = false;
+
+    for (final ticket in _tickets) {
+      final canCountDown = ticket.isCalled &&
+          !ticket.isQueuePaused &&
+          ticket.pausedRemainingSeconds == null &&
+          ticket.callDeadlineAt != null;
+      if (!canCountDown) continue;
+
+      final remaining = _remainingCallSeconds(ticket);
+      if (remaining == null || remaining > 0) {
+        continue;
+      }
+
+      final attempts = _expiryAttempts[ticket.id] ?? 0;
+      if (attempts >= _expiryRetryDelaysSeconds.length) {
+        continue;
+      }
+
+      final currentTicks = _expiryTicksRemaining[ticket.id];
+      if (currentTicks == null) {
+        _expiryTicksRemaining[ticket.id] = _expiryRetryDelaysSeconds[attempts];
+      } else if (decrementTicks) {
+        final nextTicks = currentTicks - 1;
+        if (nextTicks <= 0) {
+          final nextAttempts = attempts + 1;
+          _expiryAttempts[ticket.id] = nextAttempts;
+          if (nextAttempts < _expiryRetryDelaysSeconds.length) {
+            _expiryTicksRemaining[ticket.id] =
+                _expiryRetryDelaysSeconds[nextAttempts];
+          } else {
+            _expiryTicksRemaining.remove(ticket.id);
+          }
+          shouldRefresh = true;
+        } else {
+          _expiryTicksRemaining[ticket.id] = nextTicks;
+        }
+      }
+    }
+
+    if (shouldRefresh) {
+      unawaited(_fetchMyTickets(isSilent: true));
+    }
+  }
+
   void _syncCountdownTimer() {
-    final ticket = _ticket;
-    final shouldTick = ticket != null &&
-        ticket.isCalled &&
-        !ticket.isQueuePaused &&
-        ticket.pausedRemainingSeconds == null &&
-        ticket.callDeadlineAt != null;
+    final shouldTick = _tickets.any(
+      (ticket) =>
+          ticket.isCalled &&
+          !ticket.isQueuePaused &&
+          ticket.pausedRemainingSeconds == null &&
+          ticket.callDeadlineAt != null,
+    );
 
     if (!shouldTick) {
       _countdownTimer?.cancel();
@@ -188,9 +316,12 @@ class _MyQueueScreenState extends State<MyQueueScreen> with WidgetsBindingObserv
       return;
     }
 
+    _checkAndScheduleExpiredTickets(decrementTicks: false);
+
     _countdownTimer ??= Timer.periodic(const Duration(seconds: 1), (_) {
       if (!mounted) return;
       setState(() {});
+      _checkAndScheduleExpiredTickets(decrementTicks: true);
     });
   }
 
@@ -206,7 +337,7 @@ class _MyQueueScreenState extends State<MyQueueScreen> with WidgetsBindingObserv
     final offset = (ticket.serverTime != null && ticket.fetchedAt != null)
         ? ticket.serverTime!.difference(ticket.fetchedAt!)
         : Duration.zero;
-    final adjustedNow = DateTime.now().toUtc().add(offset);
+    final adjustedNow = _utcNow().add(offset);
     final remainingMs = deadline.toUtc().difference(adjustedNow).inMilliseconds;
     if (remainingMs <= 0) return 0;
     return (remainingMs / 1000).ceil();
@@ -219,65 +350,134 @@ class _MyQueueScreenState extends State<MyQueueScreen> with WidgetsBindingObserv
     return '${mins.toString().padLeft(2, '0')}:${secs.toString().padLeft(2, '0')}';
   }
 
+  void _scheduleRecoveryRetry() {
+    if (!mounted || _tickets.isEmpty || _recoveryRetryTimer != null) return;
+    _recoveryRetryTimer = Timer(const Duration(seconds: 5), () {
+      _recoveryRetryTimer = null;
+      if (!mounted || _tickets.isEmpty || !_isHttpSyncDegraded) return;
+      unawaited(_fetchMyTickets(isSilent: true));
+    });
+  }
+
+  void _cancelRecoveryRetryTimer() {
+    _recoveryRetryTimer?.cancel();
+    _recoveryRetryTimer = null;
+  }
+
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _countdownTimer?.cancel();
     _countdownTimer = null;
+    _cancelRecoveryRetryTimer();
+    _clearExpiryTracking();
     _queueEventSubscription?.cancel();
     _queueEventSubscription = null;
     _realtimeSubscription?.cancel();
     _realtimeSubscription = null;
+    _connectionStateSubscription?.cancel();
+    _connectionStateSubscription = null;
+    _reconnectedSubscription?.cancel();
+    _reconnectedSubscription = null;
     _realtimeService.disconnectConsumer(_realtimeConsumer);
     super.dispose();
   }
 
-  Future<void> _fetchMyTicket({bool isSilent = false}) async {
-    if (isSilent && (_isCheckingIn || _isCancelling)) return;
+  Future<void> _fetchMyTickets({
+    bool isSilent = false,
+    bool bypassCoalescing = false,
+  }) async {
+    if (isSilent && (_checkingInTicketId != null || _cancellingTicketId != null)) {
+      _queuedSilentRefresh = true;
+      return;
+    }
 
-    if (!isSilent) {
-      setState(() {
-        _isLoading = true;
-        _errorMessage = null;
-      });
+    if (isSilent && !bypassCoalescing && _activeSilentFetchSeq != null) {
+      _queuedSilentRefresh = true;
+      return;
+    }
+
+    final int fetchSeq = ++_latestFetchSeq;
+    final bool isCoalescedSilent = isSilent && !bypassCoalescing;
+    if (isCoalescedSilent) {
+      _activeSilentFetchSeq = fetchSeq;
+    } else {
+      _queuedSilentRefresh = false;
+      if (!isSilent && _tickets.isEmpty) {
+        setState(() {
+          _isLoading = true;
+          _errorMessage = null;
+        });
+      }
     }
 
     try {
       _queueService.setIncludeSkipped(true);
-      final ticket = await _queueService.getMyTicket();
-      if (mounted) {
-        setState(() {
-          _ticket = ticket;
-          _isLoading = false;
-        });
-        _syncCountdownTimer();
-        if (ticket != null) {
-          final clinicId = ticket.clinicId ?? ticket.doctor.clinicId ?? ApiConfig.defaultClinicId;
-          if (_realtimeService.activeClinicId != clinicId || !_realtimeService.isConnected) {
-            _realtimeService.connectForConsumer(_realtimeConsumer, clinicId);
-          }
+      final tickets = await _queueService.getMyTickets();
+      if (!mounted || fetchSeq != _latestFetchSeq) return;
+
+      setState(() {
+        _tickets = tickets;
+        _isLoading = false;
+        _errorMessage = null;
+        _isHttpSyncDegraded = false;
+      });
+      _cancelRecoveryRetryTimer();
+      _reconcileExpiryTracking(tickets);
+      _syncCountdownTimer();
+
+      if (tickets.isNotEmpty) {
+        final first = tickets.first;
+        final clinicId =
+            first.clinicId ?? first.doctor.clinicId ?? ApiConfig.defaultClinicId;
+        if (_realtimeService.activeClinicId != clinicId ||
+            !_realtimeService.isConnected) {
+          _realtimeService.connectForConsumer(_realtimeConsumer, clinicId);
         }
       }
     } on QueueException catch (e) {
-      if (mounted) {
-        setState(() {
-          if (e.statusCode == 401) {
-            _ticket = null;
-          } else if (!isSilent) {
-            _errorMessage = e.message;
-          }
-          _isLoading = false;
-        });
-        _syncCountdownTimer();
-      }
+      if (!mounted || fetchSeq != _latestFetchSeq) return;
+
+      setState(() {
+        if (e.statusCode == 401) {
+          _tickets = [];
+          _isHttpSyncDegraded = false;
+          _isRealtimeDegraded = false;
+          _clearExpiryTracking();
+          _cancelRecoveryRetryTimer();
+        } else if (_tickets.isNotEmpty) {
+          _isHttpSyncDegraded = true;
+          _scheduleRecoveryRetry();
+        } else if (!isSilent) {
+          _errorMessage = e.message;
+        }
+        _isLoading = false;
+      });
+      _syncCountdownTimer();
     } catch (e) {
-      if (mounted) {
-        setState(() {
-          if (!isSilent) {
-            _errorMessage = 'Kutilmagan xatolik yuz berdi: $e';
-          }
-          _isLoading = false;
-        });
+      if (!mounted || fetchSeq != _latestFetchSeq) return;
+
+      setState(() {
+        if (_tickets.isNotEmpty) {
+          _isHttpSyncDegraded = true;
+          _scheduleRecoveryRetry();
+        } else if (!isSilent) {
+          _errorMessage = 'Kutilmagan xatolik yuz berdi: $e';
+        }
+        _isLoading = false;
+      });
+      _syncCountdownTimer();
+    } finally {
+      if (_activeSilentFetchSeq == fetchSeq) {
+        _activeSilentFetchSeq = null;
+      }
+      if (mounted &&
+          _queuedSilentRefresh &&
+          _activeSilentFetchSeq == null &&
+          _checkingInTicketId == null &&
+          _cancellingTicketId == null) {
+        _queuedSilentRefresh = false;
+        unawaited(_fetchMyTickets(isSilent: _tickets.isNotEmpty));
       }
     }
   }
@@ -286,7 +486,7 @@ class _MyQueueScreenState extends State<MyQueueScreen> with WidgetsBindingObserv
   // QR Check-in
   // ---------------------------------------------------------------------------
 
-  Future<void> _startQrScan() async {
+  Future<void> _startQrScan(MyQueueTicket ticket) async {
     final scanned = await Navigator.of(context).push<String?>(
       MaterialPageRoute<String?>(
         builder: (_) => const QrScannerScreen(),
@@ -294,15 +494,15 @@ class _MyQueueScreenState extends State<MyQueueScreen> with WidgetsBindingObserv
     );
 
     if (scanned == null || scanned.trim().isEmpty) return;
-    await _submitQrToken(scanned.trim());
+    await _submitQrToken(scanned.trim(), ticket: ticket);
   }
 
-  Future<void> _submitQrToken(String token) async {
-    if (_isCheckingIn) return;
-    setState(() => _isCheckingIn = true);
+  Future<void> _submitQrToken(String token, {required MyQueueTicket ticket}) async {
+    if (_checkingInTicketId != null) return;
+    setState(() => _checkingInTicketId = ticket.id);
 
     try {
-      await _queueService.checkInWithQr(token);
+      await _queueService.checkInWithQr(token, ticketId: ticket.id);
       if (mounted) {
         final l10n = context.l10n;
         ScaffoldMessenger.of(context).showSnackBar(
@@ -313,7 +513,7 @@ class _MyQueueScreenState extends State<MyQueueScreen> with WidgetsBindingObserv
           ),
         );
         // Refresh to show updated check-in state
-        await _fetchMyTicket();
+        await _fetchMyTickets();
       }
     } on QueueException catch (e) {
       if (mounted) {
@@ -342,7 +542,7 @@ class _MyQueueScreenState extends State<MyQueueScreen> with WidgetsBindingObserv
         );
       }
     } finally {
-      if (mounted) setState(() => _isCheckingIn = false);
+      if (mounted) setState(() => _checkingInTicketId = null);
     }
   }
 
@@ -350,7 +550,7 @@ class _MyQueueScreenState extends State<MyQueueScreen> with WidgetsBindingObserv
   // Cancellation
   // ---------------------------------------------------------------------------
 
-  Future<void> _confirmAndCancelTicket() async {
+  Future<void> _confirmAndCancelTicket(MyQueueTicket ticket) async {
     final l10n = context.l10n;
 
     final confirmed = await showDialog<bool>(
@@ -358,7 +558,9 @@ class _MyQueueScreenState extends State<MyQueueScreen> with WidgetsBindingObserv
       builder: (ctx) => AlertDialog(
         key: const Key('cancel_confirm_dialog'),
         title: Text(l10n.cancelConfirmTitle),
-        content: Text(l10n.cancelConfirmMessage),
+        content: Text(
+          '№${ticket.ticketNumber} (${ticket.specialization.name})\n${l10n.cancelConfirmMessage}',
+        ),
         actions: [
           TextButton(
             key: const Key('cancel_confirm_no_button'),
@@ -379,15 +581,18 @@ class _MyQueueScreenState extends State<MyQueueScreen> with WidgetsBindingObserv
     );
 
     if (confirmed != true) return;
-    await _cancelTicket();
+    await _cancelTicket(ticket);
   }
 
-  Future<void> _cancelTicket() async {
-    if (_isCancelling) return;
-    setState(() => _isCancelling = true);
+  Future<void> _cancelTicket(MyQueueTicket ticket) async {
+    if (_cancellingTicketId != null) return;
+    setState(() => _cancellingTicketId = ticket.id);
 
     try {
-      await _queueService.cancelTicket();
+      await _queueService.cancelTicket(
+        queueId: ticket.queueId,
+        ticketId: ticket.id,
+      );
       if (mounted) {
         final l10n = context.l10n;
         ScaffoldMessenger.of(context).showSnackBar(
@@ -397,8 +602,7 @@ class _MyQueueScreenState extends State<MyQueueScreen> with WidgetsBindingObserv
             backgroundColor: AppTheme.success,
           ),
         );
-        // Refresh — ticket gone → show empty state
-        await _fetchMyTicket();
+        await _fetchMyTickets();
       }
     } on QueueException catch (e) {
       if (mounted) {
@@ -425,7 +629,7 @@ class _MyQueueScreenState extends State<MyQueueScreen> with WidgetsBindingObserv
         );
       }
     } finally {
-      if (mounted) setState(() => _isCancelling = false);
+      if (mounted) setState(() => _cancellingTicketId = null);
     }
   }
 
@@ -456,7 +660,7 @@ class _MyQueueScreenState extends State<MyQueueScreen> with WidgetsBindingObserv
           IconButton(
             icon: const Icon(Icons.refresh),
             tooltip: l10n.refreshTooltip,
-            onPressed: _isLoading ? null : _fetchMyTicket,
+            onPressed: _isLoading ? null : _fetchMyTickets,
           ),
         ],
       ),
@@ -472,7 +676,7 @@ class _MyQueueScreenState extends State<MyQueueScreen> with WidgetsBindingObserv
     if (_errorMessage != null) {
       return RefreshIndicator(
         key: const Key('my_queue_refresh_indicator_error'),
-        onRefresh: _fetchMyTicket,
+        onRefresh: _fetchMyTickets,
         child: SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
@@ -483,7 +687,7 @@ class _MyQueueScreenState extends State<MyQueueScreen> with WidgetsBindingObserv
                 title: l10n.errorOccurred,
                 description: localizeError(_errorMessage, l10n),
                 buttonText: l10n.retryButton,
-                onButtonPressed: _fetchMyTicket,
+                onButtonPressed: _fetchMyTickets,
               ),
             ],
           ),
@@ -491,12 +695,10 @@ class _MyQueueScreenState extends State<MyQueueScreen> with WidgetsBindingObserv
       );
     }
 
-    final ticket = _ticket;
-
-    if (ticket == null) {
+    if (_tickets.isEmpty) {
       return RefreshIndicator(
         key: const Key('my_queue_refresh_indicator_empty'),
-        onRefresh: _fetchMyTicket,
+        onRefresh: _fetchMyTickets,
         child: SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
@@ -519,43 +721,145 @@ class _MyQueueScreenState extends State<MyQueueScreen> with WidgetsBindingObserv
 
     return RefreshIndicator(
       key: const Key('my_queue_refresh_indicator_ticket'),
-      onRefresh: _fetchMyTicket,
+      onRefresh: _fetchMyTickets,
       child: SingleChildScrollView(
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // CALLED: prominent banner
-            if (ticket.isCalled) _buildCalledBanner(ticket, l10n),
-
-            // SERVING: in-progress banner
-            if (ticket.isServing) _buildServingBanner(l10n),
-
-            // SKIPPED: skipped banner explaining reception must restore
-            if (ticket.isSkipped) _buildSkippedBanner(l10n),
-
-            if (ticket.isCalled || ticket.isServing || ticket.isSkipped)
-              const SizedBox(height: 16),
-
-            _buildTicketCard(ticket, l10n),
-            const SizedBox(height: 16),
-
-            // Check-in card (only when WAITING and not already checked in)
-            if (ticket.isWaiting) ...[
-              _buildCheckInCard(ticket, l10n),
-              const SizedBox(height: 16),
+            if (_showSyncWarning) ...[
+              _buildSyncWarningBanner(l10n),
+              const SizedBox(height: 14),
             ],
-
-            _buildImportantNotesCard(ticket, l10n),
-            const SizedBox(height: 16),
-
-            // Cancel button — allowed for WAITING, CALLED, or SKIPPED
-            if (ticket.isWaiting || ticket.isCalled || ticket.isSkipped)
-              _buildCancelButton(l10n),
+            for (int i = 0; i < _tickets.length; i++) ...[
+              _buildSpecialistSection(_tickets[i], l10n),
+              if (i < _tickets.length - 1) const SizedBox(height: 24),
+            ],
+            const SizedBox(height: 20),
+            _buildImportantNotesCard(l10n),
+            const SizedBox(height: 14),
+            OutlinedButton.icon(
+              key: const Key('join_another_queue_button'),
+              onPressed: () => _navigateToQueueFlow(context),
+              icon: const Icon(Icons.add_circle_outline),
+              label: Text(l10n.homeJoinQueueButton),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppTheme.primary,
+                side: const BorderSide(color: AppTheme.primary),
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+            ),
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildSyncWarningBanner(AppLocalizations l10n) {
+    return Container(
+      key: const Key('my_queue_connection_warning'),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: AppTheme.warning.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppTheme.warning.withValues(alpha: 0.45)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.wifi_off_rounded, color: AppTheme.warning, size: 20),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              l10n.syncConnectionWarning,
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: AppTheme.textPrimary,
+                height: 1.3,
+              ),
+            ),
+          ),
+          TextButton(
+            key: const Key('my_queue_connection_retry_button'),
+            onPressed: () {
+              _connectRealtime(forceReconnect: true);
+              unawaited(_fetchMyTickets(isSilent: true, bypassCoalescing: true));
+            },
+            style: TextButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              minimumSize: Size.zero,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+            child: Text(l10n.retryButton),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSpecialistSection(MyQueueTicket ticket, AppLocalizations l10n) {
+    return Column(
+      key: Key('specialist_ticket_section_${ticket.id}'),
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (ticket.isQueuePaused && !ticket.isCalled) ...[
+          Container(
+            key: Key('paused_banner_${ticket.id}'),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              color: AppTheme.warning.withValues(alpha: 0.14),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: AppTheme.warning.withValues(alpha: 0.45)),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.pause_circle_outline, color: AppTheme.warning, size: 20),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    l10n.queuePausedBadge,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: AppTheme.textPrimary,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+        ],
+
+        // CALLED: prominent banner
+        if (ticket.isCalled) _buildCalledBanner(ticket, l10n),
+
+        // SERVING: in-progress banner
+        if (ticket.isServing) _buildServingBanner(l10n),
+
+        // SKIPPED: skipped banner explaining reception must restore
+        if (ticket.isSkipped) _buildSkippedBanner(l10n),
+
+        if (ticket.isCalled || ticket.isServing || ticket.isSkipped)
+          const SizedBox(height: 14),
+
+        _buildTicketCard(ticket, l10n),
+        const SizedBox(height: 14),
+
+        // Check-in card (only when WAITING and not already checked in)
+        if (ticket.isWaiting) ...[
+          _buildCheckInCard(ticket, l10n),
+          const SizedBox(height: 14),
+        ],
+
+        // Cancel button — allowed for WAITING, CALLED, or SKIPPED
+        if (ticket.isWaiting || ticket.isCalled || ticket.isSkipped)
+          _buildCancelButton(ticket, l10n),
+      ],
     );
   }
 
@@ -1047,14 +1351,16 @@ class _MyQueueScreenState extends State<MyQueueScreen> with WidgetsBindingObserv
               ),
             ),
             const SizedBox(height: 14),
-            _isCheckingIn
+            _checkingInTicketId == ticket.id
                 ? const Center(child: CircularProgressIndicator())
                 : Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       ElevatedButton.icon(
                         key: const Key('qr_checkin_button'),
-                        onPressed: _startQrScan,
+                        onPressed: _checkingInTicketId == null
+                            ? () => _startQrScan(ticket)
+                            : null,
                         icon: const Icon(Icons.qr_code_scanner),
                         label: Text(l10n.checkInButtonText),
                         style: ElevatedButton.styleFrom(
@@ -1078,8 +1384,8 @@ class _MyQueueScreenState extends State<MyQueueScreen> with WidgetsBindingObserv
   // Cancel Button
   // ---------------------------------------------------------------------------
 
-  Widget _buildCancelButton(AppLocalizations l10n) {
-    if (_isCancelling) {
+  Widget _buildCancelButton(MyQueueTicket ticket, AppLocalizations l10n) {
+    if (_cancellingTicketId == ticket.id) {
       return const Center(
         child: Padding(
           padding: EdgeInsets.symmetric(vertical: 12),
@@ -1090,7 +1396,9 @@ class _MyQueueScreenState extends State<MyQueueScreen> with WidgetsBindingObserv
 
     return OutlinedButton.icon(
       key: const Key('cancel_ticket_button'),
-      onPressed: _confirmAndCancelTicket,
+      onPressed: _cancellingTicketId == null
+          ? () => _confirmAndCancelTicket(ticket)
+          : null,
       icon: const Icon(Icons.cancel_outlined, color: AppTheme.error),
       label: Text(l10n.cancelTicketButton),
       style: OutlinedButton.styleFrom(
@@ -1106,7 +1414,7 @@ class _MyQueueScreenState extends State<MyQueueScreen> with WidgetsBindingObserv
   // Helpers
   // ---------------------------------------------------------------------------
 
-  Widget _buildImportantNotesCard(MyQueueTicket ticket, AppLocalizations l10n) {
+  Widget _buildImportantNotesCard(AppLocalizations l10n) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(

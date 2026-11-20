@@ -433,6 +433,9 @@ void main() {
     testWidgets('MyQueueScreen displays empty state when patient has no active ticket',
         (WidgetTester tester) async {
       final mockQueueClient = MockClient((request) async {
+        if (request.url.path == '/api/queues/my-tickets') {
+          return http.Response(jsonEncode([]), 200);
+        }
         if (request.url.path.contains('/api/queues/my-ticket')) {
           return http.Response(jsonEncode({'detail': 'No active queue ticket found'}), 404);
         }
@@ -461,6 +464,9 @@ void main() {
     testWidgets('MyQueueScreen renders real active ticket from backend correctly',
         (WidgetTester tester) async {
       final mockQueueClient = MockClient((request) async {
+        if (request.url.path == '/api/queues/my-tickets') {
+          return http.Response(jsonEncode([sampleMyTicketJson]), 200);
+        }
         if (request.url.path.contains('/api/queues/my-ticket')) {
           return http.Response(jsonEncode(sampleMyTicketJson), 200);
         }
@@ -514,6 +520,9 @@ void main() {
       };
 
       final mockQueueClient = MockClient((request) async {
+        if (request.url.path == '/api/queues/my-tickets') {
+          return http.Response(jsonEncode([checkedInJson]), 200);
+        }
         return http.Response(jsonEncode(checkedInJson), 200);
       });
 
@@ -537,6 +546,13 @@ void main() {
       int fetchCount = 0;
 
       final mockQueueClient = MockClient((request) async {
+        if (request.url.path == '/api/queues/my-tickets') {
+          fetchCount++;
+          final ticketJson = fetchCount == 1
+              ? sampleMyTicketJson
+              : {...sampleMyTicketJson, 'people_ahead': 1};
+          return http.Response(jsonEncode([ticketJson]), 200);
+        }
         if (request.url.path.contains('/api/queues/my-ticket')) {
           fetchCount++;
           if (fetchCount == 1) {
@@ -781,6 +797,9 @@ void main() {
       };
 
       final mockClient = MockClient((request) async {
+        if (request.url.path == '/api/queues/my-tickets') {
+          return http.Response(jsonEncode([calledTicketJson]), 200);
+        }
         return http.Response(jsonEncode(calledTicketJson), 200);
       });
 
@@ -817,6 +836,9 @@ void main() {
       };
 
       final mockClient = MockClient((request) async {
+        if (request.url.path == '/api/queues/my-tickets') {
+          return http.Response(jsonEncode([servingTicketJson]), 200);
+        }
         return http.Response(jsonEncode(servingTicketJson), 200);
       });
 
@@ -844,6 +866,9 @@ void main() {
     testWidgets('Cancel confirmation dialog appears and resolves correctly on "No"',
         (WidgetTester tester) async {
       final mockClient = MockClient((request) async {
+        if (request.url.path == '/api/queues/my-tickets') {
+          return http.Response(jsonEncode([sampleMyTicketJson]), 200);
+        }
         return http.Response(jsonEncode(sampleMyTicketJson), 200);
       });
 
@@ -882,7 +907,9 @@ void main() {
       int fetchCount = 0;
 
       final mockClient = MockClient((request) async {
-        if (request.url.path.contains('/my-ticket/cancel') && request.method == 'PATCH') {
+        if ((request.url.path.contains('/my-ticket/cancel') ||
+                request.url.path == '/api/queues/45/tickets/99/cancel') &&
+            request.method == 'PATCH') {
           return http.Response(
             jsonEncode({...sampleMyTicketJson, 'status': 'CANCELLED',
               'id': 99, 'queue_id': 45, 'patient_id': 7,
@@ -890,6 +917,13 @@ void main() {
               'patient_name': 'Ali', 'patient_phone': null,
               'source': 'ONLINE', 'created_at': '2026-09-28T09:00:00.000Z',
               'missed_turns': 0}),
+            200,
+          );
+        }
+        if (request.url.path == '/api/queues/my-tickets') {
+          fetchCount++;
+          return http.Response(
+            jsonEncode(fetchCount <= 1 ? [sampleMyTicketJson] : []),
             200,
           );
         }
@@ -935,6 +969,9 @@ void main() {
     testWidgets('Internal ticket/queue IDs and tokens are never shown to patient',
         (WidgetTester tester) async {
       final mockClient = MockClient((request) async {
+        if (request.url.path == '/api/queues/my-tickets') {
+          return http.Response(jsonEncode([sampleMyTicketJson]), 200);
+        }
         return http.Response(jsonEncode(sampleMyTicketJson), 200);
       });
 
@@ -961,6 +998,9 @@ void main() {
     testWidgets('WAITING ticket shows QR check-in button (not yet checked in)',
         (WidgetTester tester) async {
       final mockClient = MockClient((request) async {
+        if (request.url.path == '/api/queues/my-tickets') {
+          return http.Response(jsonEncode([sampleMyTicketJson]), 200);
+        }
         return http.Response(jsonEncode(sampleMyTicketJson), 200);
       });
 
@@ -990,6 +1030,9 @@ void main() {
       };
 
       final mockClient = MockClient((request) async {
+        if (request.url.path == '/api/queues/my-tickets') {
+          return http.Response(jsonEncode([checkedInJson]), 200);
+        }
         return http.Response(jsonEncode(checkedInJson), 200);
       });
 

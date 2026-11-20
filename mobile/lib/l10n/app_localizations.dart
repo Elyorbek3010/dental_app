@@ -1311,6 +1311,24 @@ abstract class AppLocalizations {
   /// In uz, this message translates to:
   /// **'To‘xtatilgan'**
   String get pausedCountdownBadge;
+
+  /// No description provided for @alreadyJoinedSpecializationError.
+  ///
+  /// In uz, this message translates to:
+  /// **'Sizda ushbu mutaxassislik bo‘yicha allaqachon faol talon mavjud.'**
+  String get alreadyJoinedSpecializationError;
+
+  /// No description provided for @queuePausedBadge.
+  ///
+  /// In uz, this message translates to:
+  /// **'Navbat vaqtincha to‘xtatilgan'**
+  String get queuePausedBadge;
+
+  /// No description provided for @syncConnectionWarning.
+  ///
+  /// In uz, this message translates to:
+  /// **'Aloqa uzildi. Oxirgi maʼlumotlar ko‘rsatilmoqda, qayta ulanilmoqda...'**
+  String get syncConnectionWarning;
 }
 
 class _AppLocalizationsDelegate

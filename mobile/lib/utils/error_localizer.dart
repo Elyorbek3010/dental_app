@@ -52,6 +52,12 @@ String localizeError(String? rawError, AppLocalizations l10n) {
   }
 
   // Already joined queue / 409
+  if (lower.contains('mutaxassislik') ||
+      (lower.contains('already has an active ticket') &&
+          lower.contains('specialization'))) {
+    return l10n.alreadyJoinedSpecializationError;
+  }
+
   if (lower.contains('already has an active ticket') ||
       lower.contains('allaqachon ushbu navbatda faol talon')) {
     return l10n.alreadyJoinedError;

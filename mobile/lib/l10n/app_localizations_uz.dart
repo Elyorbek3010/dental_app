@@ -675,4 +675,15 @@ class AppLocalizationsUz extends AppLocalizations {
 
   @override
   String get pausedCountdownBadge => 'To‘xtatilgan';
+
+  @override
+  String get alreadyJoinedSpecializationError =>
+      'Sizda ushbu mutaxassislik bo‘yicha allaqachon faol talon mavjud.';
+
+  @override
+  String get queuePausedBadge => 'Navbat vaqtincha to‘xtatilgan';
+
+  @override
+  String get syncConnectionWarning =>
+      'Aloqa uzildi. Oxirgi maʼlumotlar ko‘rsatilmoqda, qayta ulanilmoqda...';
 }

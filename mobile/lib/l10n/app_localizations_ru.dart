@@ -678,4 +678,15 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get pausedCountdownBadge => 'Пауза';
+
+  @override
+  String get alreadyJoinedSpecializationError =>
+      'У вас уже есть активный талон по данной специализации.';
+
+  @override
+  String get queuePausedBadge => 'Очередь приостановлена';
+
+  @override
+  String get syncConnectionWarning =>
+      'Нет связи с сервером. Показаны последние данные, повторное подключение...';
 }

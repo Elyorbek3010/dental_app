@@ -150,6 +150,7 @@ class CheckInQRResponse(BaseModel):
 
 class PatientQRCheckInRequest(BaseModel):
     token: str = Field(..., min_length=1)
+    ticket_id: int | None = Field(default=None, gt=0)
 
 
 

@@ -253,6 +253,10 @@ void main() {
         Map<String, dynamic> backendTicket = Map<String, dynamic>.from(baseTicket);
 
         final mockClient = MockClient((request) async {
+          if (request.url.path == '/api/queues/my-tickets') {
+            capturedIncludeSkipped = request.url.queryParameters['include_skipped'];
+            return http.Response(jsonEncode([backendTicket]), 200);
+          }
           if (request.url.path == '/api/queues/my-ticket') {
             capturedIncludeSkipped = request.url.queryParameters['include_skipped'];
             return http.Response(jsonEncode(backendTicket), 200);
@@ -375,6 +379,12 @@ void main() {
                 'missed_turns': 0,
               }),
               201,
+            );
+          }
+          if (request.url.path == '/api/queues/my-tickets') {
+            return http.Response(
+              jsonEncode([Map<String, dynamic>.from(baseTicket)..['people_ahead'] = peopleAhead]),
+              200,
             );
           }
           if (request.url.path == '/api/queues/my-ticket') {
