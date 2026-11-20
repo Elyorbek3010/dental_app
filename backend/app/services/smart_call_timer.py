@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from app.db import session as db_session
 from app.models.clinic import Clinic
 from app.models.doctor import Doctor
-from app.models.queue import Queue
+from app.models.queue import Queue, SmartCallMode
 from app.models.queue_ticket import QueueTicket, TicketStatus
 from app.realtime import notify_display_update
 from app.services.queue_notifications import (
@@ -221,7 +221,10 @@ def _sweep_single_queue(
         )
 
         advance_result = SmartCallAdvanceResult()
-        if remaining_active is None:
+        if (
+            remaining_active is None
+            and queue.smart_call_mode == SmartCallMode.AUTOMATIC
+        ):
             advance_result = advance_smart_call_for_queue(
                 db,
                 queue.id,

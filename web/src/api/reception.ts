@@ -1,10 +1,12 @@
 import { apiClient } from './client';
 import type {
   CheckInQRResponse,
+  CompleteQueueTicketResponse,
   Doctor,
   QueueResponse,
   QueueTicket,
   ReceptionQueueOverview,
+  SmartCallMode,
   Specialization,
   WalkInPatientCreate,
 } from '../types/reception';
@@ -74,9 +76,25 @@ export async function servePatient(queueId: number, ticketId: number): Promise<Q
   });
 }
 
-export async function completePatient(queueId: number, ticketId: number): Promise<QueueTicket> {
-  return apiClient<QueueTicket>(`/api/queues/${queueId}/tickets/${ticketId}/complete`, {
+export async function completePatient(
+  queueId: number,
+  ticketId: number
+): Promise<CompleteQueueTicketResponse> {
+  return apiClient<CompleteQueueTicketResponse>(
+    `/api/queues/${queueId}/tickets/${ticketId}/complete`,
+    {
+      method: 'PATCH',
+    }
+  );
+}
+
+export async function updateSmartCallMode(
+  queueId: number,
+  mode: SmartCallMode
+): Promise<QueueResponse> {
+  return apiClient<QueueResponse>(`/api/queues/${queueId}/smart-call-mode`, {
     method: 'PATCH',
+    body: JSON.stringify({ mode }),
   });
 }
 

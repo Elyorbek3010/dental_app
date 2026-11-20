@@ -2,6 +2,7 @@ from datetime import date, datetime, timezone
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.models.queue import SmartCallMode
 from app.models.queue_ticket import CheckInMethod, TicketSource, TicketStatus
 
 
@@ -28,8 +29,13 @@ class QueueResponse(BaseModel):
     queue_date: date
     is_paused: bool
     is_active: bool
+    smart_call_mode: SmartCallMode = SmartCallMode.MANUAL
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class SmartCallModeUpdateRequest(BaseModel):
+    mode: SmartCallMode = Field(..., description="Smart Call mode: MANUAL or AUTOMATIC")
 
 
 class DoctorQueuePreviewResponse(BaseModel):
@@ -67,6 +73,10 @@ class QueueTicketResponse(BaseModel):
     server_time: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class CompleteTicketResponse(QueueTicketResponse):
+    auto_called_ticket: QueueTicketResponse | None = None
 
 
 class MyTicketDoctorResponse(BaseModel):
@@ -134,6 +144,7 @@ class ReceptionQueueOverviewResponse(BaseModel):
     queue_date: date
     is_paused: bool
     is_active: bool
+    smart_call_mode: SmartCallMode = SmartCallMode.MANUAL
     doctor: ReceptionQueueDoctorResponse
     specialization: ReceptionQueueSpecializationResponse
     waiting_count: int
