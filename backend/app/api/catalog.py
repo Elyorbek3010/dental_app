@@ -7,12 +7,13 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_db, get_language, require_roles
 from app.models.clinic import Clinic
 from app.models.doctor import Doctor
-from app.models.queue import Queue
+from app.models.queue import Queue, ShiftStatus
 from app.models.queue_ticket import QueueTicket, TicketStatus
 from app.models.specialization import Specialization
 from app.models.user import User, UserRole
 from app.schemas.catalog import DoctorResponse, SpecializationResponse
-from app.schemas.queue import DoctorQueuePreviewResponse, QueueResponse
+from app.schemas.queue import DoctorQueuePreviewResponse
+from app.services.shift_service import ACTIVE_SHIFT_STATUSES
 
 router = APIRouter(
     prefix="/api/catalog",
@@ -131,11 +132,25 @@ def get_doctor_queue(
         )
 
     queue = db.scalar(
-        select(Queue).where(
+        select(Queue)
+        .where(
             Queue.doctor_id == doctor_id,
-            Queue.queue_date == date.today(),
+            Queue.is_active == True,
+            Queue.shift_status.in_(ACTIVE_SHIFT_STATUSES),
         )
+        .order_by(Queue.id.desc())
     )
+    if not queue:
+        # Preserve visibility of non-finished inactive pre-queue row if created for today
+        queue = db.scalar(
+            select(Queue)
+            .where(
+                Queue.doctor_id == doctor_id,
+                Queue.queue_date == date.today(),
+                Queue.shift_status != ShiftStatus.FINISHED,
+            )
+            .order_by(Queue.id.desc())
+        )
     if not queue:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -164,6 +179,8 @@ def get_doctor_queue(
         queue_date=queue.queue_date,
         is_paused=queue.is_paused,
         is_active=queue.is_active,
+        shift_status=queue.shift_status,
+        started_at=queue.started_at,
         waiting_count=counts.waiting_count,
         called_count=counts.called_count,
         serving_count=counts.serving_count,

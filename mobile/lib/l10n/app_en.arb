@@ -228,5 +228,6 @@
   "viewLiveQueueLabel": "Live Queue",
   "clinicPortalBadge": "Dental Care Portal",
   "searchSpecialtiesHint": "Search dental specialty...",
-  "chooseCareSubtitle": "Select department to view doctors"
+  "chooseCareSubtitle": "Select department to view doctors",
+  "queueClosedForNewPatients": "Queue closed for new patients."
 }

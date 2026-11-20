@@ -11,7 +11,7 @@ from app.core.security import create_access_token, create_check_in_qr_token
 from app.main import app
 from app.models.clinic import Clinic
 from app.models.doctor import Doctor
-from app.models.queue import Queue
+from app.models.queue import Queue, ShiftStatus
 from app.models.queue_ticket import CheckInMethod, QueueTicket, TicketSource, TicketStatus
 from app.models.specialization import Specialization
 from app.models.user import User, UserRole
@@ -133,6 +133,7 @@ class MultipleActiveQueuesTest(unittest.TestCase):
         queue_date: date | None = None,
         is_active: bool = True,
         is_paused: bool = False,
+        shift_status: ShiftStatus = ShiftStatus.OPEN,
     ) -> Queue:
         with SessionLocal() as db:
             q = Queue(
@@ -140,6 +141,7 @@ class MultipleActiveQueuesTest(unittest.TestCase):
                 queue_date=queue_date or date.today(),
                 is_active=is_active,
                 is_paused=is_paused,
+                shift_status=shift_status,
             )
             db.add(q)
             db.commit()
@@ -276,7 +278,12 @@ class MultipleActiveQueuesTest(unittest.TestCase):
         q_ortho = self._create_queue(self.doc_ortho_a)
         q_surgeon = self._create_queue(self.doc_surgeon)
         q_therapist = self._create_queue(self.doc_therapist)
-        q_yesterday = self._create_queue(self.doc_ortho_b, queue_date=date.today() - timedelta(days=1))
+        q_yesterday = self._create_queue(
+            self.doc_ortho_b,
+            queue_date=date.today() - timedelta(days=1),
+            is_active=False,
+            shift_status=ShiftStatus.FINISHED,
+        )
 
         with SessionLocal() as db:
             now = datetime.now(timezone.utc)

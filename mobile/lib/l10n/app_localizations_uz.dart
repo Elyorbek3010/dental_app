@@ -716,4 +716,8 @@ class AppLocalizationsUz extends AppLocalizations {
 
   @override
   String get chooseCareSubtitle => 'Shifokorlarni ko‘rish uchun tanlang';
+
+  @override
+  String get queueClosedForNewPatients =>
+      'Yangi bemorlar uchun navbat yopilgan.';
 }

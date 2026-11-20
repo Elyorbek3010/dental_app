@@ -146,15 +146,12 @@ class AdminAnalyticsRealtimeTest(unittest.TestCase):
         cls.db.close()
 
     def setUp(self):
-        today = date.today()
-        # Clean today's queues across all doctors in clinic1 and clinic2 to avoid cross-test bleed
+        # Clean queues across all doctors in clinic1 and clinic2 to avoid cross-test/timezone bleed
         doc_ids = self.db.scalars(
             select(Doctor.id).where(Doctor.clinic_id.in_([self.clinic1.id, self.clinic2.id]))
         ).all()
         if doc_ids:
-            q_ids = self.db.scalars(
-                select(Queue.id).where(Queue.doctor_id.in_(doc_ids), Queue.queue_date == today)
-            ).all()
+            q_ids = self.db.scalars(select(Queue.id).where(Queue.doctor_id.in_(doc_ids))).all()
             if q_ids:
                 self.db.execute(delete(QueueTicket).where(QueueTicket.queue_id.in_(q_ids)))
                 self.db.execute(delete(Queue).where(Queue.id.in_(q_ids)))

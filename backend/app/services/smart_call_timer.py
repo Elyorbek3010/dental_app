@@ -12,8 +12,9 @@ from sqlalchemy.orm import Session, sessionmaker
 from app.db import session as db_session
 from app.models.clinic import Clinic
 from app.models.doctor import Doctor
-from app.models.queue import Queue, SmartCallMode
+from app.models.queue import Queue, ShiftStatus, SmartCallMode
 from app.models.queue_ticket import QueueTicket, TicketStatus
+from app.services.shift_service import ACTIVE_SHIFT_STATUSES
 from app.realtime import notify_display_update
 from app.services.queue_notifications import (
     check_and_trigger_approaching,
@@ -173,7 +174,12 @@ def _sweep_single_queue(
             .where(Queue.id == queue_id)
             .with_for_update(skip_locked=True)
         )
-        if not queue or not queue.is_active or queue.is_paused:
+        if (
+            not queue
+            or not queue.is_active
+            or queue.is_paused
+            or queue.shift_status == ShiftStatus.FINISHED
+        ):
             db.rollback()
             return None
 
@@ -271,6 +277,7 @@ def process_expired_called_tickets(
                 .where(
                     Queue.is_active == True,
                     Queue.is_paused == False,
+                    Queue.shift_status.in_(ACTIVE_SHIFT_STATUSES),
                     QueueTicket.status == TicketStatus.CALLED,
                     QueueTicket.call_deadline_at.is_not(None),
                     QueueTicket.call_deadline_at <= current_now,

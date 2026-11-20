@@ -16,6 +16,7 @@ import { AdminSpecializationsPage } from './pages/admin/AdminSpecializationsPage
 import { AdminDoctorsPage } from './pages/admin/AdminDoctorsPage';
 import { AdminReceptionistsPage } from './pages/admin/AdminReceptionistsPage';
 import { AdminAnalyticsPage } from './pages/admin/AdminAnalyticsPage';
+import { AdminDoctorHistoryPage } from './pages/admin/AdminDoctorHistoryPage';
 
 function App() {
   return (
@@ -58,6 +59,7 @@ function App() {
               <Route path="doctors" element={<AdminDoctorsPage />} />
               <Route path="receptionists" element={<AdminReceptionistsPage />} />
               <Route path="analytics" element={<AdminAnalyticsPage />} />
+              <Route path="doctor-history" element={<AdminDoctorHistoryPage />} />
             </Route>
 
             {/* Fallback route */}

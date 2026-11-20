@@ -7,13 +7,16 @@ import {
   Clock,
   DoorClosed,
   FastForward,
+  Flag,
   Layers,
+  Lock,
   PauseCircle,
   Phone,
   PlayCircle,
   RotateCcw,
   Search,
   Sparkles,
+  Unlock,
   UserCheck,
   UserPlus,
   Users,
@@ -27,13 +30,16 @@ import {
   completePatient,
   fetchQueueTickets,
   fetchReceptionTodayQueues,
+  finishShift,
   manualCheckInPatient,
   missTurnPatient,
   pauseQueue,
+  reopenShiftAdmissions,
   resumeQueue,
   restorePatient,
   servePatient,
   skipPatient,
+  stopShiftAdmissions,
   updateSmartCallMode,
 } from '../api/reception';
 import { useI18n } from '../i18n/useI18n';
@@ -68,7 +74,7 @@ export const QueueManagementPage: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [checkInFilter, setCheckInFilter] = useState<'ALL' | 'CHECKED_IN' | 'NOT_CHECKED_IN'>('ALL');
   const [activeListTab, setActiveListTab] = useState<QueueListTab>('WAITING');
-  const [notice, setNotice] = useState<{ type: 'error' | 'success'; message: string } | null>(null);
+  const [notice, setNotice] = useState<{ type: 'error' | 'success' | 'info'; message: string } | null>(null);
 
   const [isWalkInOpen, setIsWalkInOpen] = useState(false);
   const [walkInError, setWalkInError] = useState<string | null>(null);
@@ -100,6 +106,8 @@ export const QueueManagementPage: React.FC = () => {
     (err: unknown): string => {
       if (err instanceof Error) {
         const msg = err.message.toLowerCase();
+        if (msg.includes('closed for new patients')) return t.errorClosingNewPatients;
+        if (msg.includes('cannot finish shift')) return t.finishShiftBlockedHint;
         if (msg.includes('no checked-in patient')) return t.errorNoCheckedInPatient;
         if (msg.includes('active patient') || msg.includes('already has an active')) {
           return t.errorQueueHasActivePatient;
@@ -129,8 +137,10 @@ export const QueueManagementPage: React.FC = () => {
           setSearchParams({ queueId: String(firstQueueId) }, { replace: true });
         }
       }
+      return queues;
     } catch (err) {
       setNotice({ type: 'error', message: parseBackendError(err) });
+      return [];
     } finally {
       setIsLoadingQueues(false);
     }
@@ -456,6 +466,73 @@ export const QueueManagementPage: React.FC = () => {
     }
   };
 
+  const activeShiftTicketCount =
+    waitingTickets.length + (calledTicket ? 1 : 0) + (servingTicket ? 1 : 0);
+  const canFinishShift = Boolean(activeQueue && activeShiftTicketCount === 0);
+  const skippedCountInQueue = tickets.filter((tk) => tk.status === 'SKIPPED').length;
+
+  const handleToggleAdmissions = async () => {
+    if (!activeQueue) return;
+    const isClosing = activeQueue.shift_status === 'CLOSING';
+    setActionInProgress('toggle-admissions');
+    setNotice(null);
+    try {
+      if (isClosing) {
+        await reopenShiftAdmissions(activeQueue.queue_id);
+        setNotice({ type: 'success', message: t.shiftReopenAdmissionsNotice });
+      } else {
+        await stopShiftAdmissions(activeQueue.queue_id);
+        setNotice({ type: 'info', message: t.shiftStopAdmissionsNotice });
+      }
+      await Promise.all([loadQueuesList(), loadTickets(activeQueue.queue_id, true)]);
+    } catch (err) {
+      setNotice({ type: 'error', message: parseBackendError(err) });
+    } finally {
+      setActionInProgress(null);
+    }
+  };
+
+  const handleFinishShiftPrompt = () => {
+    if (!activeQueue) return;
+    const targetQueueId = activeQueue.queue_id;
+    const doctorName = activeQueue.doctor.full_name;
+    const warningSuffix =
+      skippedCountInQueue > 0
+        ? ` ${t.finishShiftSkippedWarning.replace('{count}', String(skippedCountInQueue))}`
+        : '';
+
+    setConfirmModalState({
+      isOpen: true,
+      title: t.finishShiftConfirmTitle,
+      message: `${doctorName}: ${t.finishShiftConfirmMessage}${warningSuffix}`,
+      confirmLabel: t.finishShift,
+      isDestructive: true,
+      onConfirm: async () => {
+        setActionInProgress('finish-shift');
+        try {
+          await finishShift(targetQueueId);
+          setConfirmModalState((prev) => ({ ...prev, isOpen: false }));
+          setNotice({ type: 'success', message: t.shiftFinishedNotice });
+          const updated = await loadQueuesList();
+          const nextQueue = updated.find((q) => q.queue_id !== targetQueueId) || updated[0];
+          if (nextQueue) {
+            setSelectedQueueId(nextQueue.queue_id);
+            setSearchParams({ queueId: String(nextQueue.queue_id) }, { replace: true });
+            await loadTickets(nextQueue.queue_id, true);
+          } else {
+            setSelectedQueueId(null);
+            setTickets([]);
+            setSearchParams({}, { replace: true });
+          }
+        } catch (err) {
+          setNotice({ type: 'error', message: parseBackendError(err) });
+        } finally {
+          setActionInProgress(null);
+        }
+      },
+    });
+  };
+
   const handleAddWalkIn = async (patientName: string, patientPhone?: string) => {
     if (!selectedQueueId) return;
     setWalkInError(null);
@@ -553,9 +630,16 @@ export const QueueManagementPage: React.FC = () => {
                 {activeQueue.doctor.room_number ? `${t.room} ${activeQueue.doctor.room_number}` : '—'}
               </span>
               <StatusBadge
-                status={activeQueue.is_paused ? 'PAUSED' : 'ACTIVE'}
+                status={
+                  activeQueue.shift_status === 'CLOSING'
+                    ? 'CLOSING'
+                    : activeQueue.shift_status === 'FINISHED'
+                      ? 'FINISHED'
+                      : 'OPEN'
+                }
                 size="sm"
               />
+              {activeQueue.is_paused && <StatusBadge status="PAUSED" size="sm" />}
               <button
                 type="button"
                 onClick={handlePauseResumeQueue}
@@ -578,13 +662,55 @@ export const QueueManagementPage: React.FC = () => {
                   </>
                 )}
               </button>
+
+              <button
+                type="button"
+                onClick={handleToggleAdmissions}
+                disabled={actionInProgress !== null}
+                className={`inline-flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-semibold shadow-2xs transition-colors cursor-pointer disabled:opacity-50 ${
+                  activeQueue.shift_status === 'CLOSING'
+                    ? 'border-sky-200 bg-sky-50 text-sky-700 hover:bg-sky-100 dark:border-sky-800 dark:bg-sky-950/40 dark:text-sky-300'
+                    : 'border-slate-200 bg-white text-[#14283F] hover:bg-slate-50 dark:border-[#253F5B] dark:bg-[#12243A] dark:text-[#F1F5F9] dark:hover:bg-[#1A3047]'
+                }`}
+              >
+                {activeQueue.shift_status === 'CLOSING' ? (
+                  <>
+                    <Unlock className="h-3.5 w-3.5" />
+                    {t.reopenAdmissions}
+                  </>
+                ) : (
+                  <>
+                    <Lock className="h-3.5 w-3.5" />
+                    {t.stopNewTickets}
+                  </>
+                )}
+              </button>
+
+              <button
+                type="button"
+                onClick={handleFinishShiftPrompt}
+                disabled={actionInProgress !== null || !canFinishShift}
+                title={canFinishShift ? t.finishShift : t.finishShiftBlockedHint}
+                className={`inline-flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-semibold shadow-2xs transition-colors ${
+                  canFinishShift
+                    ? 'border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100 dark:border-rose-800 dark:bg-rose-950/40 dark:text-rose-300 cursor-pointer'
+                    : 'border-[#DCE9EE] bg-[#F5FAFB] text-[#94A3B8] dark:border-[#253F5B] dark:bg-[#0B1728]/50 dark:text-[#64748B] cursor-not-allowed'
+                } disabled:opacity-60`}
+              >
+                <Flag className="h-3.5 w-3.5" />
+                {t.finishShift}
+              </button>
             </>
           )}
 
           <AppButton
             variant="secondary"
             size="sm"
-            disabled={actionInProgress !== null || activeQueue?.is_paused}
+            disabled={
+              actionInProgress !== null ||
+              activeQueue?.is_paused ||
+              activeQueue?.shift_status === 'CLOSING'
+            }
             onClick={() => setIsWalkInOpen(true)}
             icon={<UserPlus className="h-3.5 w-3.5 text-[#0284C7] dark:text-[#38BDF8]" />}
           >
@@ -592,6 +718,17 @@ export const QueueManagementPage: React.FC = () => {
           </AppButton>
         </div>
       </div>
+
+      {activeQueue && (activeQueue.shift_status === 'CLOSING' || activeQueue.is_paused) && (
+        <AlertBanner
+          type="info"
+          message={
+            activeQueue.shift_status === 'CLOSING'
+              ? t.shiftClosingBannerHint
+              : t.shiftPausedBannerHint
+          }
+        />
+      )}
 
       {notice && (
         <AlertBanner

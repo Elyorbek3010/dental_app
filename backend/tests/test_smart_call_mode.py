@@ -204,8 +204,22 @@ class SmartCallModeTest(unittest.TestCase):
         self.assertEqual(mode_res.status_code, 200)
         self.assertEqual(mode_res.json()["smart_call_mode"], "AUTOMATIC")
 
-        # New day (tomorrow) still resets to MANUAL
+        # Overlapping unfinished shift on tomorrow is blocked with 409 until today's shift finishes
         tomorrow = (date.today() + timedelta(days=1)).isoformat()
+        overlap_res = self.client.post(
+            "/api/queues/open",
+            json={"doctor_id": self.doctor1.id, "queue_date": tomorrow},
+            headers=self.rec1_headers,
+        )
+        self.assertEqual(overlap_res.status_code, 409)
+
+        # Finish today's shift cleanly, then new shift resets to MANUAL
+        finish_res = self.client.patch(
+            f"/api/queues/{q_today['id']}/finish",
+            headers=self.rec1_headers,
+        )
+        self.assertEqual(finish_res.status_code, 200)
+
         next_res = self.client.post(
             "/api/queues/open",
             json={"doctor_id": self.doctor1.id, "queue_date": tomorrow},
@@ -546,7 +560,7 @@ class SmartCallModeTest(unittest.TestCase):
             text=True,
             check=True,
         )
-        self.assertIn("a2b3c4d5e6f7", cur.stdout)
+        self.assertIn("b3c4d5e6f7a8", cur.stdout)
 
     def test_11_automatic_manual_skip_called_advances_next_with_countdown_and_notifications(self):
         q = self.client.post(

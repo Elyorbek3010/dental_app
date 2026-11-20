@@ -131,6 +131,16 @@ class _DoctorQueueScreenState extends State<DoctorQueueScreen> {
     final queue = _queue;
     if (_isJoining || queue == null) return;
 
+    if (queue.isClosing) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(l10n.queueClosedForNewPatients),
+          backgroundColor: context.dentalColors.warning,
+        ),
+      );
+      return;
+    }
+
     if (queue.isPaused) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -293,7 +303,7 @@ class _DoctorQueueScreenState extends State<DoctorQueueScreen> {
                 ),
                 child: ElevatedButton.icon(
                   key: const Key('doctor_queue_join_button'),
-                  onPressed: (_isJoining || queue.isPaused)
+                  onPressed: (_isJoining || queue.isPaused || queue.isClosing)
                       ? null
                       : () => _handleJoinQueue(l10n),
                   icon: _isJoining
@@ -305,13 +315,20 @@ class _DoctorQueueScreenState extends State<DoctorQueueScreen> {
                             color: Colors.white,
                           ),
                         )
-                      : const Icon(Icons.add_circle_outline, size: 20),
+                      : Icon(
+                          queue.isClosing
+                              ? Icons.lock_clock_outlined
+                              : Icons.add_circle_outline,
+                          size: 20,
+                        ),
                   label: Text(
                     _isJoining
                         ? l10n.loadingText
-                        : (queue.isPaused
-                            ? l10n.queueTemporarilyPaused
-                            : l10n.joinQueueButton),
+                        : (queue.isClosing
+                            ? l10n.queueClosedForNewPatients
+                            : (queue.isPaused
+                                ? l10n.queueTemporarilyPaused
+                                : l10n.joinQueueButton)),
                   ),
                 ),
               ),
@@ -459,7 +476,9 @@ class _DoctorQueueScreenState extends State<DoctorQueueScreen> {
             ] else ...[
               // Perforated Ticket-Pass Pre-Join Telemetry Board
               TicketPassCard(
-                accentColor: queue.isPaused ? colors.warning : colors.teal,
+                accentColor: (queue.isPaused || queue.isClosing)
+                    ? colors.warning
+                    : colors.teal,
                 topSection: Padding(
                   padding: const EdgeInsets.fromLTRB(20, 18, 20, 12),
                   child: Column(
@@ -493,11 +512,15 @@ class _DoctorQueueScreenState extends State<DoctorQueueScreen> {
                             ),
                           ),
                           StatusChip(
-                            status: queue.isPaused ? 'PAUSED' : 'SERVING',
-                            isPaused: queue.isPaused,
-                            label: queue.isPaused
-                                ? l10n.queueStatusPaused
-                                : l10n.queueStatusActive,
+                            status: queue.isClosing
+                                ? 'PAUSED'
+                                : (queue.isPaused ? 'PAUSED' : 'SERVING'),
+                            isPaused: queue.isPaused || queue.isClosing,
+                            label: queue.isClosing
+                                ? l10n.queueClosedForNewPatients
+                                : (queue.isPaused
+                                    ? l10n.queueStatusPaused
+                                    : l10n.queueStatusActive),
                           ),
                         ],
                       ),

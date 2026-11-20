@@ -714,4 +714,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get chooseCareSubtitle => 'Select department to view doctors';
+
+  @override
+  String get queueClosedForNewPatients => 'Queue closed for new patients.';
 }

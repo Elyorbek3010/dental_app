@@ -1,9 +1,10 @@
-import { apiClient } from './client';
+import { apiClient, API_BASE_URL, getStoredAccessToken } from './client';
 import type {
   AdminAnalyticsOverview,
   AdminClinic,
   AdminDoctor,
   AdminDoctorCreatePayload,
+  AdminDoctorPerformanceResponse,
   AdminDoctorUpdatePayload,
   AdminReceptionist,
   AdminReceptionistCreatePayload,
@@ -11,6 +12,7 @@ import type {
   AdminSpecialization,
   AdminSpecializationCreatePayload,
   AdminSpecializationUpdatePayload,
+  ReportingPeriod,
 } from '../types/admin';
 
 // --- Clinic ---
@@ -107,4 +109,59 @@ export async function updateAdminReceptionistApi(
 // --- Analytics ---
 export async function getAdminAnalyticsApi(): Promise<AdminAnalyticsOverview> {
   return apiClient<AdminAnalyticsOverview>('/api/admin/analytics/overview');
+}
+
+export interface DoctorPerformanceFilters {
+  doctor_id?: number;
+  specialization_id?: number;
+  period?: ReportingPeriod;
+  date_from?: string;
+  date_to?: string;
+}
+
+function buildPerformanceQueryString(filters: DoctorPerformanceFilters): string {
+  const params = new URLSearchParams();
+  if (filters.doctor_id !== undefined) params.set('doctor_id', String(filters.doctor_id));
+  if (filters.specialization_id !== undefined) {
+    params.set('specialization_id', String(filters.specialization_id));
+  }
+  if (filters.period) params.set('period', filters.period);
+  if (filters.date_from) params.set('date_from', filters.date_from);
+  if (filters.date_to) params.set('date_to', filters.date_to);
+  const qs = params.toString();
+  return qs ? `?${qs}` : '';
+}
+
+export async function getAdminDoctorPerformanceApi(
+  filters: DoctorPerformanceFilters
+): Promise<AdminDoctorPerformanceResponse> {
+  const qs = buildPerformanceQueryString(filters);
+  return apiClient<AdminDoctorPerformanceResponse>(`/api/admin/doctors/performance${qs}`);
+}
+
+export async function exportAdminDoctorPerformanceCsvApi(
+  filters: DoctorPerformanceFilters
+): Promise<void> {
+  const qs = buildPerformanceQueryString(filters);
+  const token = getStoredAccessToken();
+  const headers: Record<string, string> = {};
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+  const response = await fetch(`${API_BASE_URL}/api/admin/doctors/performance/export${qs}`, {
+    method: 'GET',
+    headers,
+  });
+  if (!response.ok) {
+    throw new Error(`Export failed (${response.status})`);
+  }
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = 'doctor-performance-history.csv';
+  document.body.appendChild(anchor);
+  anchor.click();
+  document.body.removeChild(anchor);
+  URL.revokeObjectURL(url);
 }

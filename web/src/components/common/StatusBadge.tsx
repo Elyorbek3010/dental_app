@@ -2,6 +2,7 @@ import React from 'react';
 import {
   CheckCircle2,
   Clock,
+  Lock,
   PauseCircle,
   PhoneCall,
   PlayCircle,
@@ -12,7 +13,7 @@ import { useI18n } from '../../i18n/useI18n';
 import type { TicketStatus } from '../../types/reception';
 
 interface StatusBadgeProps {
-  status: TicketStatus | 'ACTIVE' | 'PAUSED' | 'NOT_OPEN';
+  status: TicketStatus | 'ACTIVE' | 'PAUSED' | 'NOT_OPEN' | 'OPEN' | 'CLOSING' | 'FINISHED';
   size?: 'sm' | 'md' | 'lg';
 }
 
@@ -105,6 +106,33 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({ status, size = 'md' })
         >
           <span className="h-1.5 w-1.5 rounded-full bg-[#94A3B8]" />
           {t.queueStateNotOpen}
+        </span>
+      );
+    case 'OPEN':
+      return (
+        <span
+          className={`inline-flex items-center rounded-full bg-emerald-50 text-emerald-700 ring-1 ring-emerald-600/20 dark:bg-emerald-950/50 dark:text-emerald-300 dark:ring-emerald-400/30 ${sizeClasses}`}
+        >
+          <PlayCircle className="h-3 w-3 shrink-0" />
+          {t.shiftStatusOpen}
+        </span>
+      );
+    case 'CLOSING':
+      return (
+        <span
+          className={`inline-flex items-center rounded-full bg-orange-50 text-orange-800 ring-1 ring-orange-600/25 dark:bg-orange-950/50 dark:text-orange-300 dark:ring-orange-400/35 ${sizeClasses}`}
+        >
+          <Lock className="h-3 w-3 shrink-0" />
+          {t.shiftStatusClosing}
+        </span>
+      );
+    case 'FINISHED':
+      return (
+        <span
+          className={`inline-flex items-center rounded-full bg-slate-100 text-slate-700 ring-1 ring-slate-500/20 dark:bg-slate-800/80 dark:text-slate-300 dark:ring-slate-600/40 ${sizeClasses}`}
+        >
+          <CheckCircle2 className="h-3 w-3 shrink-0" />
+          {t.shiftStatusFinished}
         </span>
       );
     default:

@@ -63,13 +63,21 @@ String localizeError(String? rawError, AppLocalizations l10n) {
     return l10n.alreadyJoinedError;
   }
 
+  // Queue closing for new patients
+  if (lower.contains('closed for new patients') ||
+      lower.contains('yangi bemorlar uchun navbat yopilgan')) {
+    return l10n.queueClosedForNewPatients;
+  }
+
   // Queue paused
   if (lower.contains('vaqtincha to‘xtatilgan') || lower.contains('paused')) {
     return l10n.queuePausedSnackbar;
   }
 
-  // Queue inactive
-  if (lower.contains('hozirda faol emas') || lower.contains('queue is inactive')) {
+  // Queue inactive / finished shift
+  if (lower.contains('hozirda faol emas') ||
+      lower.contains('queue is inactive') ||
+      lower.contains('shift has already finished')) {
     return l10n.queueInactiveSnackbar;
   }
 

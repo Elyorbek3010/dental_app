@@ -132,14 +132,8 @@ class PreJoinQueueVisibilityBackendTest(unittest.TestCase):
         cls.db.close()
 
     def setUp(self):
-        today = date.today()
         doc_ids = [self.doctor.id, self.doctor2.id, self.doctor_inactive.id]
-        queues = self.db.scalars(
-            select(Queue).where(
-                Queue.doctor_id.in_(doc_ids),
-                Queue.queue_date == today,
-            )
-        ).all()
+        queues = self.db.scalars(select(Queue).where(Queue.doctor_id.in_(doc_ids))).all()
         q_ids = [q.id for q in queues]
         if q_ids:
             self.db.execute(delete(QueueTicket).where(QueueTicket.queue_id.in_(q_ids)))
@@ -404,8 +398,9 @@ class PreJoinQueueVisibilityBackendTest(unittest.TestCase):
         data = res.json()
         expected_keys = {
             "id", "queue_id", "doctor_id", "queue_date",
-            "is_paused", "is_active", "waiting_count",
-            "called_count", "serving_count", "estimated_position_if_joined",
+            "is_paused", "is_active", "shift_status", "started_at",
+            "waiting_count", "called_count", "serving_count",
+            "estimated_position_if_joined",
         }
         self.assertEqual(set(data.keys()), expected_keys)
 

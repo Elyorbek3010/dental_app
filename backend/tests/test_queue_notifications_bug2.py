@@ -11,7 +11,7 @@ from app.main import app
 from app.models.clinic import Clinic
 from app.models.doctor import Doctor
 from app.models.push_device import PushDevice
-from app.models.queue import Queue
+from app.models.queue import Queue, ShiftStatus
 from app.models.queue_ticket import CheckInMethod, QueueTicket, TicketSource, TicketStatus
 from app.models.specialization import Specialization
 from app.models.user import User, UserRole
@@ -254,12 +254,13 @@ class QueueNotificationsBug2Test(unittest.TestCase):
     def test_include_skipped_ignores_old_dates_and_prefers_active_ticket(self, mock_send_push):
         mock_send_push.return_value = PushNotificationResult(success=True, message_id="msg-3")
 
-        # Create yesterday's queue with a SKIPPED ticket for patient1
+        # Create a finished historical queue with a SKIPPED ticket for patient1
         yesterday_q = Queue(
             doctor_id=self.doctor.id,
             queue_date=date.today() - timedelta(days=1),
             is_paused=False,
-            is_active=True,
+            is_active=False,
+            shift_status=ShiftStatus.FINISHED,
         )
         self.db.add(yesterday_q)
         self.db.commit()

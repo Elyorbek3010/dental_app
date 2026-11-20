@@ -13,6 +13,7 @@ from app.models.queue import Queue
 from app.models.queue_ticket import QueueTicket
 from app.models.specialization import Specialization
 from app.models.user import User, UserRole
+from app.services.shift_service import get_clinic_local_date
 
 
 class DailyQueueOpenBackendTest(unittest.TestCase):
@@ -139,15 +140,9 @@ class DailyQueueOpenBackendTest(unittest.TestCase):
         cls.db.close()
 
     def setUp(self):
-        # Clean up any queues for test doctors today so each test starts from known state
-        today = date.today()
+        # Clean up any queues for test doctors across all dates so each test starts from known state
         doc_ids = [self.doctor1.id, self.doctor2.id, self.doctor_inactive.id]
-        queues = self.db.scalars(
-            select(Queue).where(
-                Queue.doctor_id.in_(doc_ids),
-                Queue.queue_date == today,
-            )
-        ).all()
+        queues = self.db.scalars(select(Queue).where(Queue.doctor_id.in_(doc_ids))).all()
         q_ids = [q.id for q in queues]
         if q_ids:
             self.db.execute(delete(QueueTicket).where(QueueTicket.queue_id.in_(q_ids)))
@@ -161,7 +156,7 @@ class DailyQueueOpenBackendTest(unittest.TestCase):
         self.assertEqual(res.status_code, 201, res.text)
         data = res.json()
         self.assertEqual(data["doctor_id"], self.doctor1.id)
-        self.assertEqual(data["queue_date"], str(date.today()))
+        self.assertEqual(data["queue_date"], str(get_clinic_local_date(self.clinic1)))
         self.assertTrue(data["is_active"])
         self.assertFalse(data["is_paused"])
         queue_id = data["id"]
@@ -245,7 +240,7 @@ class DailyQueueOpenBackendTest(unittest.TestCase):
     def test_open_queue_reactivates_inactive_queue(self):
         """Opening an existing inactive queue sets is_active=True and returns the queue."""
         # Create an inactive queue in DB
-        today = date.today()
+        today = get_clinic_local_date(self.clinic1)
         inactive_queue = Queue(
             doctor_id=self.doctor1.id,
             queue_date=today,

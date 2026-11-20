@@ -3,6 +3,7 @@ import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import {
   BarChart3,
   Building2,
+  History,
   LayoutDashboard,
   LogOut,
   Menu,
@@ -150,6 +151,11 @@ export const AdminLayout: React.FC = () => {
       to: '/admin/analytics',
       label: t.adminNavAnalytics,
       icon: <BarChart3 className="h-4.5 w-4.5" />,
+    },
+    {
+      to: '/admin/doctor-history',
+      label: t.adminNavDoctorHistory,
+      icon: <History className="h-4.5 w-4.5" />,
     },
   ];
 

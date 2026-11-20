@@ -2,6 +2,8 @@ from datetime import datetime, timezone
 
 from pydantic import BaseModel, Field
 
+from app.models.queue import ShiftStatus
+
 
 class PublicDisplayClinic(BaseModel):
     id: int
@@ -30,6 +32,7 @@ class PublicDisplayQueue(BaseModel):
     doctor: PublicDisplayDoctor
     specialization: PublicDisplaySpecialization
     is_paused: bool
+    shift_status: ShiftStatus = ShiftStatus.OPEN
     called_ticket: PublicDisplayTicket | None = None
     waiting_tickets: list[PublicDisplayTicket] = Field(default_factory=list)
 
