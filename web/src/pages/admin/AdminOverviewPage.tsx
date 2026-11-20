@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Activity,
   ArrowRight,
@@ -23,43 +23,66 @@ export const AdminOverviewPage: React.FC = () => {
   const [analytics, setAnalytics] = useState<AdminAnalyticsOverview | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const isMountedRef = useRef(true);
+  const latestRequestIdRef = useRef(0);
 
-  const fetchAnalytics = useCallback(async () => {
-    setIsLoading(true);
-    setError(null);
-    try {
-      const data = await getAdminAnalyticsApi();
-      setAnalytics(data);
-    } catch (err: unknown) {
-      if (err instanceof Error) {
-        setError(err.message);
-      } else {
-        setError(t.errorGeneric);
+  const fetchAnalytics = useCallback(
+    async (isSilent = false) => {
+      const requestId = ++latestRequestIdRef.current;
+      if (!isSilent) {
+        setIsLoading(true);
+        setError(null);
       }
-    } finally {
-      setIsLoading(false);
-    }
-  }, [t.errorGeneric]);
+      try {
+        const data = await getAdminAnalyticsApi();
+        if (!isMountedRef.current || requestId !== latestRequestIdRef.current) return;
+        setAnalytics(data);
+        setError(null);
+      } catch (err: unknown) {
+        if (!isMountedRef.current || requestId !== latestRequestIdRef.current) return;
+        if (!isSilent) {
+          if (err instanceof Error) {
+            setError(err.message);
+          } else {
+            setError(t.errorGeneric);
+          }
+        }
+      } finally {
+        if (isMountedRef.current && requestId === latestRequestIdRef.current && !isSilent) {
+          setIsLoading(false);
+        }
+      }
+    },
+    [t.errorGeneric]
+  );
 
   useEffect(() => {
-    let isCancelled = false;
+    isMountedRef.current = true;
+    const requestId = ++latestRequestIdRef.current;
+
     getAdminAnalyticsApi()
       .then((data) => {
-        if (!isCancelled) {
-          setAnalytics(data);
-          setIsLoading(false);
-        }
+        if (!isMountedRef.current || requestId !== latestRequestIdRef.current) return;
+        setAnalytics(data);
+        setError(null);
+        setIsLoading(false);
       })
       .catch((err: unknown) => {
-        if (!isCancelled) {
-          setError(err instanceof Error ? err.message : t.errorGeneric);
-          setIsLoading(false);
-        }
+        if (!isMountedRef.current || requestId !== latestRequestIdRef.current) return;
+        setError(err instanceof Error ? err.message : t.errorGeneric);
+        setIsLoading(false);
       });
-    return () => {
-      isCancelled = true;
+
+    const handleAdminRefresh = () => {
+      fetchAnalytics(true);
     };
-  }, [t.errorGeneric]);
+
+    window.addEventListener('admin:refresh', handleAdminRefresh);
+    return () => {
+      isMountedRef.current = false;
+      window.removeEventListener('admin:refresh', handleAdminRefresh);
+    };
+  }, [fetchAnalytics, t.errorGeneric]);
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
@@ -77,7 +100,7 @@ export const AdminOverviewPage: React.FC = () => {
 
         <button
           type="button"
-          onClick={fetchAnalytics}
+          onClick={() => fetchAnalytics(false)}
           className="inline-flex items-center gap-2 rounded-xl border border-zinc-200 bg-white px-3.5 py-2 text-xs font-semibold text-zinc-700 shadow-2xs hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
         >
           <Activity className="h-3.5 w-3.5 text-purple-600 dark:text-purple-400" />
