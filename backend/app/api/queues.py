@@ -89,6 +89,7 @@ def _build_my_queue_ticket_response(
         id=ticket.id,
         queue_id=ticket.queue_id,
         ticket_number=ticket.ticket_number,
+        queue_position=ticket.queue_position,
         status=ticket.status,
         created_at=ticket.created_at,
         checked_in_at=ticket.checked_in_at,

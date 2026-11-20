@@ -290,5 +290,15 @@
   "pausedCountdownBadge": "To‘xtatilgan",
   "alreadyJoinedSpecializationError": "Sizda ushbu mutaxassislik bo‘yicha allaqachon faol talon mavjud.",
   "queuePausedBadge": "Navbat vaqtincha to‘xtatilgan",
-  "syncConnectionWarning": "Aloqa uzildi. Oxirgi maʼlumotlar ko‘rsatilmoqda, qayta ulanilmoqda..."
+  "syncConnectionWarning": "Aloqa uzildi. Oxirgi maʼlumotlar ko‘rsatilmoqda, qayta ulanilmoqda...",
+  "themeSectionTitle": "Tashqi ko‘rinish",
+  "themeLight": "Yorug‘",
+  "themeDark": "Tungi",
+  "themeSystem": "Tizim",
+  "quickAccessTitle": "Tezkor xizmatlar",
+  "activeVisitStatusTitle": "Faol tashrif",
+  "viewLiveQueueLabel": "Jonli navbat",
+  "clinicPortalBadge": "Stomatologiya klinikasi",
+  "searchSpecialtiesHint": "Mutaxassislikni qidirish...",
+  "chooseCareSubtitle": "Shifokorlarni ko‘rish uchun tanlang"
 }

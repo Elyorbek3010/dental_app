@@ -9,6 +9,10 @@ import type { AdminSpecialization } from '../../types/admin';
 import { useI18n } from '../../i18n/useI18n';
 import { ConfirmModal } from '../../components/common/ConfirmModal';
 import { AlertBanner } from '../../components/common/AlertBanner';
+import { PageHeader } from '../../components/common/PageHeader';
+import { AppButton } from '../../components/common/AppButton';
+import { EmptyState } from '../../components/common/EmptyState';
+import { LoadingSkeleton } from '../../components/common/LoadingSkeleton';
 
 export const AdminSpecializationsPage: React.FC = () => {
   const { t } = useI18n();
@@ -162,28 +166,22 @@ export const AdminSpecializationsPage: React.FC = () => {
   });
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto">
-      {/* Page Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h2 className="text-xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100 flex items-center gap-2.5">
-            <Stethoscope className="h-6 w-6 text-purple-600 dark:text-purple-400" />
-            {t.adminSpecializationsTitle}
-          </h2>
-          <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
-            {t.adminSpecializationsSubtitle}
-          </p>
-        </div>
-
-        <button
-          type="button"
-          onClick={handleOpenCreateModal}
-          className="inline-flex items-center gap-2 rounded-xl bg-purple-600 px-4 py-2.5 text-xs font-semibold text-white shadow-xs hover:bg-purple-700 transition-colors cursor-pointer shrink-0"
-        >
-          <Plus className="h-4 w-4" />
-          {t.adminAddSpecialization}
-        </button>
-      </div>
+    <div className="space-y-6 max-w-7xl mx-auto animate-dental-in">
+      <PageHeader
+        title={t.adminSpecializationsTitle}
+        subtitle={t.adminSpecializationsSubtitle}
+        icon={<Stethoscope className="h-5 w-5" />}
+        actions={
+          <AppButton
+            variant="primary"
+            size="md"
+            icon={<Plus className="h-4 w-4" />}
+            onClick={handleOpenCreateModal}
+          >
+            {t.adminAddSpecialization}
+          </AppButton>
+        }
+      />
 
       {error && (
         <AlertBanner type="error" message={error} onClose={() => setError(null)} />
@@ -199,17 +197,17 @@ export const AdminSpecializationsPage: React.FC = () => {
       {/* Filter and Search Bar */}
       <div className="flex flex-col sm:flex-row gap-3">
         <div className="relative flex-1">
-          <Search className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400" />
+          <Search className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-[#64748B] dark:text-[#A5B4C7]" />
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder={t.adminSearch}
-            className="w-full rounded-xl border border-zinc-200 bg-white pl-10 pr-4 py-2 text-xs text-zinc-900 placeholder-zinc-400 shadow-2xs focus:border-purple-500 focus:outline-hidden dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100"
+            className="w-full rounded-xl border border-[#DCE9EE] bg-white pl-10 pr-4 py-2 text-xs text-[#14283F] placeholder-[#64748B]/70 shadow-2xs focus:border-[#0D9488] focus:ring-2 focus:ring-[#0D9488]/15 focus:outline-hidden dark:border-[#253F5B] dark:bg-[#12243A] dark:text-[#F1F5F9] dark:placeholder-[#A5B4C7]/60"
           />
         </div>
 
-        <div className="flex rounded-xl border border-zinc-200 bg-white p-1 dark:border-zinc-800 dark:bg-zinc-900">
+        <div className="inline-flex rounded-xl border border-[#DCE9EE] bg-white p-1 dark:border-[#253F5B] dark:bg-[#12243A]">
           {(['ALL', 'ACTIVE', 'INACTIVE'] as const).map((status) => (
             <button
               key={status}
@@ -217,8 +215,8 @@ export const AdminSpecializationsPage: React.FC = () => {
               onClick={() => setFilterStatus(status)}
               className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors cursor-pointer ${
                 filterStatus === status
-                  ? 'bg-purple-600 text-white shadow-2xs'
-                  : 'text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100'
+                  ? 'bg-[#0D9488] text-white shadow-2xs'
+                  : 'text-[#64748B] hover:text-[#14283F] dark:text-[#A5B4C7] dark:hover:text-[#F1F5F9]'
               }`}
             >
               {status === 'ALL'
@@ -232,21 +230,22 @@ export const AdminSpecializationsPage: React.FC = () => {
       </div>
 
       {/* Table */}
-      <div className="rounded-2xl border border-zinc-200 bg-white shadow-2xs dark:border-zinc-800 dark:bg-zinc-900 overflow-hidden">
+      <div className="rounded-2xl border border-[#DCE9EE] bg-white shadow-xs dark:border-[#253F5B] dark:bg-[#12243A] overflow-hidden">
         {isLoading ? (
-          <div className="p-12 text-center text-xs text-zinc-500 dark:text-zinc-400">
-            <div className="mx-auto h-7 w-7 animate-spin rounded-full border-2 border-purple-600 border-t-transparent mb-3" />
-            {t.loading}
+          <div className="p-6">
+            <LoadingSkeleton rows={5} cards={0} />
           </div>
         ) : filteredSpecs.length === 0 ? (
-          <div className="p-12 text-center text-xs text-zinc-500 dark:text-zinc-400">
-            {t.adminSpecEmpty}
-          </div>
+          <EmptyState
+            compact
+            title={t.adminSpecEmpty}
+            icon={<Stethoscope className="h-6 w-6" />}
+          />
         ) : (
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto lg:max-h-[calc(100vh-15.5rem)] lg:overflow-y-auto">
             <table className="w-full text-left border-collapse text-xs">
-              <thead>
-                <tr className="border-b border-zinc-200 bg-zinc-50/75 dark:border-zinc-800 dark:bg-zinc-800/40 text-zinc-500 dark:text-zinc-400 uppercase tracking-wider font-semibold">
+              <thead className="sticky top-0 z-10">
+                <tr className="border-b border-[#DCE9EE] bg-[#F5FAFB] dark:border-[#253F5B] dark:bg-[#1A3047] text-[#64748B] dark:text-[#A5B4C7] uppercase tracking-wider font-semibold">
                   <th className="px-5 py-3.5">{t.adminSpecNameUz}</th>
                   <th className="px-5 py-3.5">{t.adminSpecNameRu}</th>
                   <th className="px-5 py-3.5">{t.adminSpecNameEn}</th>
@@ -254,39 +253,39 @@ export const AdminSpecializationsPage: React.FC = () => {
                   <th className="px-5 py-3.5 text-right">{t.actions}</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800/60 font-medium">
+              <tbody className="divide-y divide-[#DCE9EE]/70 dark:divide-[#253F5B]/70 font-medium">
                 {filteredSpecs.map((spec) => (
                   <tr
                     key={spec.id}
-                    className="hover:bg-zinc-50/60 dark:hover:bg-zinc-800/30 transition-colors"
+                    className="hover:bg-[#F5FAFB]/80 dark:hover:bg-[#1A3047]/45 transition-colors"
                   >
-                    <td className="px-5 py-3.5 text-zinc-900 dark:text-zinc-100 font-semibold">
+                    <td className="px-5 py-3.5 text-[#14283F] dark:text-[#F1F5F9] font-semibold">
                       {spec.name_uz}
                     </td>
-                    <td className="px-5 py-3.5 text-zinc-600 dark:text-zinc-300">
+                    <td className="px-5 py-3.5 text-[#64748B] dark:text-[#A5B4C7]">
                       {spec.name_ru || '—'}
                     </td>
-                    <td className="px-5 py-3.5 text-zinc-600 dark:text-zinc-300">
+                    <td className="px-5 py-3.5 text-[#64748B] dark:text-[#A5B4C7]">
                       {spec.name_en || '—'}
                     </td>
                     <td className="px-5 py-3.5">
                       {spec.is_active ? (
-                        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-2xs font-semibold text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300">
+                        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 border border-emerald-200/80 px-2.5 py-0.5 text-2xs font-semibold text-emerald-700 dark:bg-emerald-950/50 dark:border-emerald-800/60 dark:text-emerald-300">
                           <CheckCircle2 className="h-3 w-3" />
                           {t.adminSpecActive}
                         </span>
                       ) : (
-                        <span className="inline-flex items-center gap-1 rounded-full bg-zinc-100 px-2 py-0.5 text-2xs font-semibold text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400">
+                        <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 border border-slate-200 px-2.5 py-0.5 text-2xs font-semibold text-slate-600 dark:bg-slate-800/60 dark:border-slate-700 dark:text-slate-300">
                           <XCircle className="h-3 w-3" />
                           {t.adminSpecInactive}
                         </span>
                       )}
                     </td>
-                    <td className="px-5 py-3.5 text-right space-x-2">
+                    <td className="px-5 py-3.5 text-right space-x-1.5">
                       <button
                         type="button"
                         onClick={() => handleOpenEditModal(spec)}
-                        className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-2xs font-semibold text-purple-700 hover:bg-purple-50 dark:text-purple-400 dark:hover:bg-purple-950/40 transition-colors cursor-pointer"
+                        className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-2xs font-semibold text-[#0F766E] hover:bg-[#DDF7F0]/70 dark:text-[#2DD4BF] dark:hover:bg-[#0D9488]/15 transition-colors cursor-pointer"
                         title={t.adminEditSpecialization}
                       >
                         <Edit2 className="h-3.5 w-3.5" />
@@ -319,25 +318,25 @@ export const AdminSpecializationsPage: React.FC = () => {
 
       {/* Create / Edit Modal */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs">
-          <div className="w-full max-w-lg rounded-2xl border border-zinc-200 bg-white p-6 shadow-xl dark:border-zinc-800 dark:bg-zinc-900">
-            <h3 className="text-base font-bold text-zinc-900 dark:text-zinc-100">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/55 backdrop-blur-xs">
+          <div className="w-full max-w-lg rounded-2xl border border-[#DCE9EE] bg-white p-6 shadow-2xl dark:border-[#253F5B] dark:bg-[#12243A] animate-dental-in">
+            <h3 className="text-base font-bold text-[#14283F] dark:text-[#F1F5F9]">
               {editingSpec ? t.adminEditSpecialization : t.adminAddSpecialization}
             </h3>
-            <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+            <p className="mt-1 text-xs text-[#64748B] dark:text-[#A5B4C7]">
               {t.adminSpecializationsSubtitle}
             </p>
 
             {formError && (
-              <div className="mt-4 rounded-xl bg-red-50 p-2.5 text-xs text-red-600 dark:bg-red-950/40 dark:text-red-400">
+              <div className="mt-4 rounded-xl border border-rose-200 bg-rose-50 p-2.5 text-xs text-rose-700 dark:border-rose-900/60 dark:bg-rose-950/40 dark:text-rose-300">
                 {formError}
               </div>
             )}
 
             <form onSubmit={handleSave} className="mt-4 space-y-4 text-xs">
               <div>
-                <label className="block font-semibold text-zinc-700 dark:text-zinc-300">
-                  {t.adminSpecNameUz} <span className="text-red-500">*</span>
+                <label className="block font-semibold text-[#14283F] dark:text-[#F1F5F9]">
+                  {t.adminSpecNameUz} <span className="text-rose-500">*</span>
                 </label>
                 <input
                   type="text"
@@ -345,12 +344,12 @@ export const AdminSpecializationsPage: React.FC = () => {
                   value={nameUz}
                   onChange={(e) => setNameUz(e.target.value)}
                   placeholder="Masalan: Terapiya"
-                  className="mt-1 block w-full rounded-xl border border-zinc-300 bg-white px-3 py-2 text-zinc-900 shadow-2xs focus:border-purple-500 focus:outline-hidden dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
+                  className="mt-1.5 block w-full rounded-xl border border-[#DCE9EE] bg-[#F5FAFB] px-3.5 py-2.5 text-[#14283F] placeholder-[#64748B]/75 focus:border-[#0D9488] focus:bg-white focus:ring-2 focus:ring-[#0D9488]/15 focus:outline-hidden dark:border-[#253F5B] dark:bg-[#12243A] dark:text-[#F1F5F9] dark:placeholder-[#A5B4C7]/70 dark:focus:border-[#2DD4BF] dark:focus:bg-[#0B1728]"
                 />
               </div>
 
               <div>
-                <label className="block font-semibold text-zinc-700 dark:text-zinc-300">
+                <label className="block font-semibold text-[#14283F] dark:text-[#F1F5F9]">
                   {t.adminSpecNameRu}
                 </label>
                 <input
@@ -358,12 +357,12 @@ export const AdminSpecializationsPage: React.FC = () => {
                   value={nameRu}
                   onChange={(e) => setNameRu(e.target.value)}
                   placeholder="Например: Терапия"
-                  className="mt-1 block w-full rounded-xl border border-zinc-300 bg-white px-3 py-2 text-zinc-900 shadow-2xs focus:border-purple-500 focus:outline-hidden dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
+                  className="mt-1.5 block w-full rounded-xl border border-[#DCE9EE] bg-[#F5FAFB] px-3.5 py-2.5 text-[#14283F] placeholder-[#64748B]/75 focus:border-[#0D9488] focus:bg-white focus:ring-2 focus:ring-[#0D9488]/15 focus:outline-hidden dark:border-[#253F5B] dark:bg-[#12243A] dark:text-[#F1F5F9] dark:placeholder-[#A5B4C7]/70 dark:focus:border-[#2DD4BF] dark:focus:bg-[#0B1728]"
                 />
               </div>
 
               <div>
-                <label className="block font-semibold text-zinc-700 dark:text-zinc-300">
+                <label className="block font-semibold text-[#14283F] dark:text-[#F1F5F9]">
                   {t.adminSpecNameEn}
                 </label>
                 <input
@@ -371,26 +370,27 @@ export const AdminSpecializationsPage: React.FC = () => {
                   value={nameEn}
                   onChange={(e) => setNameEn(e.target.value)}
                   placeholder="e.g. Therapy / General Dentistry"
-                  className="mt-1 block w-full rounded-xl border border-zinc-300 bg-white px-3 py-2 text-zinc-900 shadow-2xs focus:border-purple-500 focus:outline-hidden dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
+                  className="mt-1.5 block w-full rounded-xl border border-[#DCE9EE] bg-[#F5FAFB] px-3.5 py-2.5 text-[#14283F] placeholder-[#64748B]/75 focus:border-[#0D9488] focus:bg-white focus:ring-2 focus:ring-[#0D9488]/15 focus:outline-hidden dark:border-[#253F5B] dark:bg-[#12243A] dark:text-[#F1F5F9] dark:placeholder-[#A5B4C7]/70 dark:focus:border-[#2DD4BF] dark:focus:bg-[#0B1728]"
                 />
               </div>
 
-              <div className="flex justify-end gap-3 pt-3">
-                <button
+              <div className="flex justify-end gap-2.5 pt-3 border-t border-[#DCE9EE] dark:border-[#253F5B]">
+                <AppButton
                   type="button"
+                  variant="ghost"
                   onClick={() => setIsModalOpen(false)}
                   disabled={isSaving}
-                  className="rounded-xl px-4 py-2 font-semibold text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800"
                 >
                   {t.cancel}
-                </button>
-                <button
+                </AppButton>
+                <AppButton
                   type="submit"
+                  variant="primary"
+                  loading={isSaving}
                   disabled={isSaving || !nameUz.trim()}
-                  className="rounded-xl bg-purple-600 px-4 py-2 font-semibold text-white shadow-xs hover:bg-purple-700 disabled:opacity-50"
                 >
                   {isSaving ? t.adminSaving : t.adminSave}
-                </button>
+                </AppButton>
               </div>
             </form>
           </div>

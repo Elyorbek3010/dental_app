@@ -23,13 +23,16 @@ class EmptyStateCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.dentalColors;
+    final resolvedIconColor = iconColor ?? colors.teal;
+
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 28),
+      padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 30),
       decoration: BoxDecoration(
-        color: AppTheme.surface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppTheme.cardBorder),
+        color: colors.surface,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: colors.border),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -37,40 +40,40 @@ class EmptyStateCard extends StatelessWidget {
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: (iconColor ?? AppTheme.primary).withValues(alpha: 0.1),
+              color: resolvedIconColor.withValues(alpha: 0.14),
               shape: BoxShape.circle,
             ),
             child: Icon(
               icon,
               size: 40,
-              color: iconColor ?? AppTheme.primary,
+              color: resolvedIconColor,
             ),
           ),
           const SizedBox(height: 16),
           Text(
             title,
             textAlign: TextAlign.center,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.w700,
-              color: AppTheme.textPrimary,
+              color: colors.textPrimary,
             ),
           ),
           const SizedBox(height: 8),
           Text(
             description,
             textAlign: TextAlign.center,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 14,
-              color: AppTheme.textSecondary,
-              height: 1.4,
+              color: colors.textSecondary,
+              height: 1.45,
             ),
           ),
           if (buttonText != null && onButtonPressed != null) ...[
             const SizedBox(height: 20),
             ElevatedButton.icon(
               onPressed: onButtonPressed,
-              icon: const Icon(Icons.arrow_forward, size: 18),
+              icon: const Icon(Icons.arrow_forward_rounded, size: 18),
               label: Text(buttonText!),
             ),
           ],

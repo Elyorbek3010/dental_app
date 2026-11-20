@@ -313,6 +313,21 @@ class PreJoinQueueVisibilityBackendTest(unittest.TestCase):
         self.assertEqual(join_res.status_code, 201)
         self.assertEqual(join_res.json()["queue_position"], 3)
 
+        # Issued ticket responses expose the matching queue_position
+        my_tickets_res = self.client.get(
+            "/api/queues/my-tickets",
+            headers=self.patient_headers,
+        )
+        self.assertEqual(my_tickets_res.status_code, 200)
+        self.assertEqual(my_tickets_res.json()[0]["queue_position"], 3)
+
+        my_ticket_res = self.client.get(
+            "/api/queues/my-ticket",
+            headers=self.patient_headers,
+        )
+        self.assertEqual(my_ticket_res.status_code, 200)
+        self.assertEqual(my_ticket_res.json()["queue_position"], 3)
+
     # 8. missed-turn/reordered positions
     def test_08_missed_turn_reordered_positions(self):
         queue = self._create_queue(self.doctor.id)

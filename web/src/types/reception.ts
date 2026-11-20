@@ -87,3 +87,8 @@ export interface QueueResponse {
   is_paused: boolean;
   is_active: boolean;
 }
+
+export interface CheckInQRResponse {
+  token: string;
+  expires_in_seconds: number;
+}

@@ -1,7 +1,8 @@
 import React from 'react';
-import { AlertCircle, Clock, DoorOpen, UserCheck, Users } from 'lucide-react';
-import { formatCountdownMmSs, useSmartCallCountdown } from '../../hooks/useSmartCallCountdown';
+import { AlertCircle, DoorOpen, UserCheck, Users } from 'lucide-react';
+import { useSmartCallCountdown } from '../../hooks/useSmartCallCountdown';
 import type { PublicDisplayQueue } from '../../types/display';
+import { CountdownRing } from '../common/CountdownRing';
 
 interface QueueCardProps {
   queue: PublicDisplayQueue;
@@ -23,29 +24,38 @@ export const QueueCard: React.FC<QueueCardProps> = ({
     isPaused: is_paused,
   });
 
+  const isCalling = Boolean(called_ticket);
+  const isUrgent = remainingSeconds !== null && remainingSeconds <= 15 && !is_paused;
+
   return (
-    <article className="flex flex-col bg-slate-900/90 rounded-2xl border border-slate-800 shadow-2xl overflow-hidden transition-all duration-300">
+    <article
+      className={`flex flex-col rounded-3xl border shadow-2xl overflow-hidden transition-all duration-300 ${
+        isCalling && !is_paused
+          ? 'bg-[#0B1728] border-[#2DD4BF]/55 animate-call-glow'
+          : 'bg-[#0B1728] border-[#1E354E]'
+      }`}
+    >
       {/* Paused Banner */}
       {is_paused && (
-        <div className="bg-amber-500/20 border-b border-amber-500/30 px-4 py-2 flex items-center justify-center gap-2 text-amber-300 font-semibold text-sm tracking-wide uppercase">
+        <div className="bg-amber-500/20 border-b border-amber-400/35 px-4 py-2 flex items-center justify-center gap-2 text-amber-300 font-bold text-xs md:text-sm tracking-wider uppercase">
           <AlertCircle className="w-4 h-4 shrink-0" />
           Queue paused
         </div>
       )}
 
       {/* Doctor & Room Header */}
-      <header className="p-5 border-b border-slate-800/80 bg-slate-800/40 flex items-start justify-between gap-4">
-        <div>
-          <h2 className="text-xl md:text-2xl font-bold text-white tracking-tight m-0">
+      <header className="px-6 py-5 border-b border-[#1E354E] bg-[#12243A] flex items-start justify-between gap-4">
+        <div className="min-w-0">
+          <h2 className="text-xl md:text-2xl font-extrabold text-[#F1F5F9] tracking-tight m-0 truncate">
             {doctor.full_name}
           </h2>
-          <p className="text-sm md:text-base font-medium text-cyan-400 m-0 mt-0.5">
+          <p className="text-sm md:text-base font-semibold text-[#2DD4BF] m-0 mt-0.5 truncate">
             {specialization.name}
           </p>
         </div>
 
         {doctor.room_number && (
-          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-500/20 border border-blue-400/30 text-blue-300 font-semibold text-sm tracking-wide shrink-0">
+          <div className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-[#38BDF8]/15 border border-[#38BDF8]/35 text-[#38BDF8] font-bold text-sm tracking-wide shrink-0 tabular-nums">
             <DoorOpen className="w-4 h-4" />
             <span>{doctor.room_number}</span>
           </div>
@@ -53,42 +63,43 @@ export const QueueCard: React.FC<QueueCardProps> = ({
       </header>
 
       {/* Body: NOW CALLING Section */}
-      <section className="p-6 flex-1 flex flex-col items-center justify-center text-center bg-gradient-to-b from-slate-900/40 to-slate-950/60 border-b border-slate-800/80">
-        <span className="text-xs md:text-sm font-extrabold uppercase tracking-widest text-slate-400 flex items-center gap-2 mb-2">
-          <UserCheck className="w-4 h-4 text-emerald-400" />
+      <section className="px-6 py-7 flex-1 flex flex-col items-center justify-center text-center bg-gradient-to-b from-[#0E1E32] to-[#071422] border-b border-[#1E354E]">
+        <span className="inline-flex items-center gap-2 rounded-full bg-[#12243A] border border-[#253F5B] px-3.5 py-1 text-xs md:text-sm font-extrabold uppercase tracking-widest text-[#A5B4C7] mb-4">
+          <UserCheck className="w-4 h-4 text-[#2DD4BF]" />
           NOW CALLING
         </span>
 
         {called_ticket ? (
-          <div className="flex flex-col items-center justify-center my-2">
-            <div className="text-6xl md:text-7xl lg:text-8xl font-black font-mono tracking-tighter text-emerald-400 drop-shadow-[0_0_25px_rgba(52,211,153,0.3)] animate-pulse">
-              №{called_ticket.ticket_number}
-            </div>
-            {remainingSeconds !== null && (
+          <div
+            key={called_ticket.ticket_number}
+            className="flex flex-col items-center justify-center gap-4 animate-dental-in"
+          >
+            <div className="flex items-center justify-center gap-5 flex-wrap">
               <div
-                className={`mt-3 inline-flex items-center gap-2 px-4 py-1.5 rounded-full border font-mono font-bold text-base md:text-lg tabular-nums ${
-                  is_paused
-                    ? 'bg-amber-500/15 border-amber-400/40 text-amber-300'
-                    : remainingSeconds <= 15
-                      ? 'bg-rose-500/15 border-rose-400/40 text-rose-300'
-                      : 'bg-slate-800/80 border-slate-700 text-cyan-300'
+                className={`text-6xl md:text-7xl lg:text-8xl font-black font-mono tracking-tight tabular-nums ${
+                  isUrgent
+                    ? 'text-amber-300 drop-shadow-[0_0_24px_rgba(245,158,11,0.35)]'
+                    : 'text-[#2DD4BF] drop-shadow-[0_0_28px_rgba(45,212,191,0.35)]'
                 }`}
               >
-                <Clock className="w-4 h-4 shrink-0" />
-                <span className="font-sans text-xs md:text-sm uppercase tracking-wider text-slate-300">
-                  Remaining Time:
-                </span>
-                <span>{formatCountdownMmSs(remainingSeconds)}</span>
-                {is_paused && (
-                  <span className="font-sans text-xs uppercase tracking-wider text-amber-300">
-                    (Paused)
-                  </span>
-                )}
+                №{called_ticket.ticket_number}
               </div>
-            )}
+
+              {remainingSeconds !== null && (
+                <CountdownRing
+                  remainingSeconds={remainingSeconds}
+                  isPaused={is_paused}
+                  size="lg"
+                  forceDark
+                  label="Remaining"
+                  pausedLabel="Paused"
+                />
+              )}
+            </div>
+
             {doctor.room_number && (
-              <div className="mt-3 inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 font-bold text-base md:text-lg tracking-wider uppercase">
-                <DoorOpen className="w-5 h-5 text-emerald-400" />
+              <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-[#0D9488]/15 border border-[#2DD4BF]/35 text-[#2DD4BF] font-extrabold text-sm md:text-base tracking-wider uppercase tabular-nums">
+                <DoorOpen className="w-4 h-4 text-[#2DD4BF]" />
                 {doctor.room_number.toUpperCase().startsWith('ROOM')
                   ? doctor.room_number.toUpperCase()
                   : `ROOM ${doctor.room_number.toUpperCase()}`}
@@ -96,37 +107,41 @@ export const QueueCard: React.FC<QueueCardProps> = ({
             )}
           </div>
         ) : (
-          <div className="py-8 text-slate-400 text-lg md:text-xl font-medium italic flex items-center justify-center gap-2">
+          <div className="py-8 text-[#A5B4C7] text-lg md:text-xl font-medium italic flex items-center justify-center gap-2">
             Waiting for next patient
           </div>
         )}
       </section>
 
       {/* Footer: WAITING Tickets Section */}
-      <footer className="p-5 bg-slate-950/80">
+      <footer className="px-6 py-4 bg-[#091627]">
         <div className="flex items-center justify-between gap-2 mb-3">
-          <span className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
-            <Users className="w-4 h-4 text-cyan-400" />
+          <span className="text-xs font-extrabold uppercase tracking-wider text-[#A5B4C7] flex items-center gap-1.5">
+            <Users className="w-4 h-4 text-[#38BDF8]" />
             WAITING
           </span>
-          <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-slate-700">
+          <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-[#12243A] text-[#F1F5F9] border border-[#253F5B] tabular-nums">
             {waiting_tickets.length} {waiting_tickets.length === 1 ? 'patient' : 'patients'}
           </span>
         </div>
 
         {waiting_tickets.length > 0 ? (
-          <div className="flex flex-wrap gap-2.5 max-h-36 overflow-y-auto scrollbar-thin">
-            {waiting_tickets.map((t) => (
+          <div className="flex flex-wrap gap-2 max-h-36 overflow-y-auto">
+            {waiting_tickets.map((t, index) => (
               <span
                 key={t.ticket_number}
-                className="px-3.5 py-1.5 rounded-xl bg-slate-800/90 hover:bg-slate-700/90 text-white font-mono font-bold text-base md:text-lg border border-slate-700 shadow-sm transition-colors"
+                className={`px-3.5 py-1.5 rounded-xl font-mono font-bold text-base md:text-lg border tabular-nums ${
+                  index === 0
+                    ? 'bg-[#38BDF8]/15 border-[#38BDF8]/45 text-[#38BDF8]'
+                    : 'bg-[#12243A] border-[#253F5B] text-[#F1F5F9]'
+                }`}
               >
                 №{t.ticket_number}
               </span>
             ))}
           </div>
         ) : (
-          <div className="text-sm md:text-base text-slate-400 font-medium italic py-2 text-center">
+          <div className="text-sm md:text-base text-[#A5B4C7]/75 font-medium italic py-1.5 text-center">
             No patients waiting
           </div>
         )}

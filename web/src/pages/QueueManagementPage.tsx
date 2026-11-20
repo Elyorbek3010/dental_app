@@ -7,10 +7,12 @@ import {
   Clock,
   DoorClosed,
   FastForward,
+  Layers,
   PauseCircle,
   Phone,
   PlayCircle,
   RotateCcw,
+  Search,
   Sparkles,
   UserCheck,
   UserPlus,
@@ -34,12 +36,18 @@ import {
   skipPatient,
 } from '../api/reception';
 import { useI18n } from '../i18n/useI18n';
-import { formatCountdownMmSs, useSmartCallCountdown } from '../hooks/useSmartCallCountdown';
+import { useSmartCallCountdown } from '../hooks/useSmartCallCountdown';
 import type { QueueTicket, ReceptionQueueOverview } from '../types/reception';
-import { StatusBadge } from '../components/common/StatusBadge';
-import { ConfirmModal } from '../components/common/ConfirmModal';
-import { WalkInModal } from '../components/common/WalkInModal';
 import { AlertBanner } from '../components/common/AlertBanner';
+import { AppButton } from '../components/common/AppButton';
+import { ConfirmModal } from '../components/common/ConfirmModal';
+import { CountdownRing } from '../components/common/CountdownRing';
+import { EmptyState } from '../components/common/EmptyState';
+import { LoadingSkeleton } from '../components/common/LoadingSkeleton';
+import { StatusBadge } from '../components/common/StatusBadge';
+import { WalkInModal } from '../components/common/WalkInModal';
+
+type QueueListTab = 'WAITING' | 'COMPLETED' | 'INACTIVE';
 
 export const QueueManagementPage: React.FC = () => {
   const { t, language } = useI18n();
@@ -56,9 +64,11 @@ export const QueueManagementPage: React.FC = () => {
   const [isLoadingQueues, setIsLoadingQueues] = useState<boolean>(true);
   const [isLoadingTickets, setIsLoadingTickets] = useState<boolean>(false);
   const [actionInProgress, setActionInProgress] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [checkInFilter, setCheckInFilter] = useState<'ALL' | 'CHECKED_IN' | 'NOT_CHECKED_IN'>('ALL');
+  const [activeListTab, setActiveListTab] = useState<QueueListTab>('WAITING');
   const [notice, setNotice] = useState<{ type: 'error' | 'success'; message: string } | null>(null);
 
-  // Modals state
   const [isWalkInOpen, setIsWalkInOpen] = useState(false);
   const [walkInError, setWalkInError] = useState<string | null>(null);
   const [confirmModalState, setConfirmModalState] = useState<{
@@ -85,24 +95,27 @@ export const QueueManagementPage: React.FC = () => {
     isPaused: currentActiveQueue?.is_paused ?? false,
   });
 
-  // Decode backend error messages into friendly localized messages
-  const parseBackendError = useCallback((err: unknown): string => {
-    if (err instanceof Error) {
-      const msg = err.message.toLowerCase();
-      if (msg.includes('no checked-in patient')) return t.errorNoCheckedInPatient;
-      if (msg.includes('active patient') || msg.includes('already has an active')) return t.errorQueueHasActivePatient;
-      if (msg.includes('paused')) return t.errorQueuePaused;
-      if (msg.includes('inactive')) return t.errorQueueInactive;
-      if (msg.includes('only waiting')) return t.errorOnlyWaitingCanBeCalled;
-      if (msg.includes('only called')) return t.errorOnlyCalledCanBeServed;
-      if (msg.includes('only serving')) return t.errorOnlyServingCanBeCompleted;
-      if (msg.includes('already checked in')) return t.errorTicketAlreadyCheckedIn;
-      return err.message;
-    }
-    return t.errorGeneric;
-  }, [t]);
+  const parseBackendError = useCallback(
+    (err: unknown): string => {
+      if (err instanceof Error) {
+        const msg = err.message.toLowerCase();
+        if (msg.includes('no checked-in patient')) return t.errorNoCheckedInPatient;
+        if (msg.includes('active patient') || msg.includes('already has an active')) {
+          return t.errorQueueHasActivePatient;
+        }
+        if (msg.includes('paused')) return t.errorQueuePaused;
+        if (msg.includes('inactive')) return t.errorQueueInactive;
+        if (msg.includes('only waiting')) return t.errorOnlyWaitingCanBeCalled;
+        if (msg.includes('only called')) return t.errorOnlyCalledCanBeServed;
+        if (msg.includes('only serving')) return t.errorOnlyServingCanBeCompleted;
+        if (msg.includes('already checked in')) return t.errorTicketAlreadyCheckedIn;
+        return err.message;
+      }
+      return t.errorGeneric;
+    },
+    [t]
+  );
 
-  // Load available queues today
   const loadQueuesList = useCallback(async () => {
     try {
       const queues = await fetchReceptionTodayQueues();
@@ -122,19 +135,21 @@ export const QueueManagementPage: React.FC = () => {
     }
   }, [parseBackendError, selectedQueueId, setSearchParams]);
 
-  // Load tickets for the currently selected queue
-  const loadTickets = useCallback(async (queueId: number, isSilent = false) => {
-    if (!isSilent) setIsLoadingTickets(true);
-    try {
-      const ticketList = await fetchQueueTickets(queueId);
-      setTickets(ticketList);
-      setTicketsFetchedAtMs(Date.now());
-    } catch (err) {
-      setNotice({ type: 'error', message: parseBackendError(err) });
-    } finally {
-      if (!isSilent) setIsLoadingTickets(false);
-    }
-  }, [parseBackendError]);
+  const loadTickets = useCallback(
+    async (queueId: number, isSilent = false) => {
+      if (!isSilent) setIsLoadingTickets(true);
+      try {
+        const ticketList = await fetchQueueTickets(queueId);
+        setTickets(ticketList);
+        setTicketsFetchedAtMs(Date.now());
+      } catch (err) {
+        setNotice({ type: 'error', message: parseBackendError(err) });
+      } finally {
+        if (!isSilent) setIsLoadingTickets(false);
+      }
+    },
+    [parseBackendError]
+  );
 
   useEffect(() => {
     let isCancelled = false;
@@ -189,18 +204,30 @@ export const QueueManagementPage: React.FC = () => {
 
   const activeQueue = todayQueues.find((q) => q.queue_id === selectedQueueId);
 
-  // Group tickets by lifecycle stage
-  const servingTicket = tickets.find((t) => t.status === 'SERVING');
-  const calledTicket = tickets.find((t) => t.status === 'CALLED');
+  const servingTicket = tickets.find((tk) => tk.status === 'SERVING');
+  const calledTicket = tickets.find((tk) => tk.status === 'CALLED');
   const waitingTickets = tickets
-    .filter((t) => t.status === 'WAITING')
+    .filter((tk) => tk.status === 'WAITING')
     .sort((a, b) => a.queue_position - b.queue_position);
-  const completedTickets = tickets.filter((t) => t.status === 'COMPLETED');
+  const completedTickets = tickets.filter((tk) => tk.status === 'COMPLETED');
   const inactiveTickets = tickets.filter(
-    (t) => t.status === 'SKIPPED' || t.status === 'CANCELLED'
+    (tk) => tk.status === 'SKIPPED' || tk.status === 'CANCELLED'
   );
 
-  // Actions
+  const filteredWaitingTickets = waitingTickets.filter((ticket) => {
+    const isCheckedIn = ticket.checked_in_at !== null;
+    if (checkInFilter === 'CHECKED_IN' && !isCheckedIn) return false;
+    if (checkInFilter === 'NOT_CHECKED_IN' && isCheckedIn) return false;
+    if (!searchQuery.trim()) return true;
+    const term = searchQuery.toLowerCase();
+    return (
+      ticket.patient_name.toLowerCase().includes(term) ||
+      (ticket.patient_phone || '').toLowerCase().includes(term) ||
+      String(ticket.ticket_number).includes(term)
+    );
+  });
+
+  // Operational Actions (existing API + rules preserved)
   const handleSmartCall = async () => {
     if (!selectedQueueId) return;
     setActionInProgress('smart-call');
@@ -421,33 +448,25 @@ export const QueueManagementPage: React.FC = () => {
 
   if (isLoadingQueues) {
     return (
-      <div className="p-16 text-center">
-        <div className="inline-block h-8 w-8 animate-spin rounded-full border-3 border-indigo-600 border-t-transparent" />
-        <p className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">{t.loading}</p>
+      <div className="max-w-7xl mx-auto">
+        <LoadingSkeleton cards={2} rows={5} />
       </div>
     );
   }
 
   if (todayQueues.length === 0) {
     return (
-      <div className="rounded-2xl border border-dashed border-zinc-300 p-12 text-center dark:border-zinc-800 bg-white/50 dark:bg-zinc-900/50">
-        <Users className="mx-auto h-12 w-12 text-zinc-400 mb-3" />
-        <h3 className="text-base font-bold text-zinc-800 dark:text-zinc-200">
-          {t.noQueuesToday}
-        </h3>
-        <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400 max-w-md mx-auto">
-          {t.noQueuesHint}
-        </p>
+      <div className="max-w-7xl mx-auto">
+        <EmptyState title={t.noQueuesToday} description={t.noQueuesHint} />
       </div>
     );
   }
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto font-sans pb-12">
-      {/* Top Controls: Queue Selector & Primary Actions */}
-      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-        {/* Doctor Queue Tabs / Dropdown */}
-        <div className="flex items-center gap-2 overflow-x-auto pb-1 lg:pb-0">
+    <div className="space-y-3 lg:space-y-0 lg:h-[calc(100vh-6rem)] lg:flex lg:flex-col lg:gap-2.5 max-w-7xl mx-auto animate-dental-in">
+      {/* Compact Top Control Bar: Doctor Tabs + Status + Walk-in / Pause */}
+      <div className="shrink-0 flex flex-col md:flex-row md:items-center md:justify-between gap-2 rounded-2xl border border-[#DCE9EE] bg-white px-3.5 py-2 shadow-2xs dark:border-[#253F5B] dark:bg-[#12243A]">
+        <div className="flex items-center gap-2 overflow-x-auto pb-1 lg:pb-0 min-w-0">
           {todayQueues.map((q) => {
             const isSelected = q.queue_id === selectedQueueId;
             return (
@@ -458,18 +477,18 @@ export const QueueManagementPage: React.FC = () => {
                   setSelectedQueueId(q.queue_id);
                   setSearchParams({ queueId: String(q.queue_id) }, { replace: true });
                 }}
-                className={`flex items-center gap-2.5 px-4 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
+                className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
                   isSelected
-                    ? 'bg-indigo-600 text-white shadow-sm'
-                    : 'bg-white text-zinc-700 border border-zinc-200 hover:bg-zinc-50 dark:bg-zinc-800 dark:text-zinc-300 dark:border-zinc-700'
+                    ? 'bg-[#0D9488] text-white shadow-xs dark:bg-[#14B8A6] dark:text-[#07131D]'
+                    : 'bg-[#F5FAFB] text-[#14283F] border border-[#DCE9EE] hover:bg-[#EDF6F8] dark:bg-[#0B1728]/60 dark:text-[#F1F5F9] dark:border-[#253F5B] dark:hover:bg-[#1A3047]'
                 }`}
               >
                 <span>{q.doctor.full_name}</span>
                 <span
-                  className={`px-1.5 py-0.5 rounded-md text-[10px] font-bold ${
+                  className={`px-1.5 py-0.5 rounded-md text-[10px] font-bold tabular-nums ${
                     isSelected
-                      ? 'bg-indigo-700 text-indigo-100'
-                      : 'bg-zinc-100 text-zinc-600 dark:bg-zinc-700 dark:text-zinc-300'
+                      ? 'bg-white/20 text-white dark:bg-[#0B1728]/25 dark:text-[#07131D]'
+                      : 'bg-[#DDF7F0] text-[#0F766E] dark:bg-[#12353D] dark:text-[#2DD4BF]'
                   }`}
                 >
                   {q.waiting_count}
@@ -482,65 +501,51 @@ export const QueueManagementPage: React.FC = () => {
           })}
         </div>
 
-        {/* Global Action Buttons */}
-        <div className="flex items-center gap-3">
-          {/* Pause / Resume Button */}
+        <div className="flex flex-wrap items-center gap-2 shrink-0">
           {activeQueue && (
-            <button
-              type="button"
-              onClick={handlePauseResumeQueue}
-              disabled={actionInProgress !== null}
-              className={`inline-flex items-center gap-1.5 rounded-xl border px-3.5 py-2 text-xs font-semibold shadow-2xs transition-colors cursor-pointer disabled:opacity-50 ${
-                activeQueue.is_paused
-                  ? 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300'
-                  : 'border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-300'
-              }`}
-            >
-              {activeQueue.is_paused ? (
-                <>
-                  <PlayCircle className="h-4 w-4" />
-                  {t.resumeQueue}
-                </>
-              ) : (
-                <>
-                  <PauseCircle className="h-4 w-4" />
-                  {t.pauseQueue}
-                </>
-              )}
-            </button>
+            <>
+              <span className="inline-flex items-center gap-1.5 rounded-lg bg-[#EDF6F8] px-2.5 py-1 text-xs font-semibold text-[#14283F] dark:bg-[#1A3047] dark:text-[#F1F5F9]">
+                <DoorClosed className="h-3.5 w-3.5 text-[#0284C7] dark:text-[#38BDF8]" />
+                {activeQueue.doctor.room_number ? `${t.room} ${activeQueue.doctor.room_number}` : '—'}
+              </span>
+              <StatusBadge
+                status={activeQueue.is_paused ? 'PAUSED' : 'ACTIVE'}
+                size="sm"
+              />
+              <button
+                type="button"
+                onClick={handlePauseResumeQueue}
+                disabled={actionInProgress !== null}
+                className={`inline-flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-semibold shadow-2xs transition-colors cursor-pointer disabled:opacity-50 ${
+                  activeQueue.is_paused
+                    ? 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300'
+                    : 'border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-100 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-300'
+                }`}
+              >
+                {activeQueue.is_paused ? (
+                  <>
+                    <PlayCircle className="h-3.5 w-3.5" />
+                    {t.resumeQueue}
+                  </>
+                ) : (
+                  <>
+                    <PauseCircle className="h-3.5 w-3.5" />
+                    {t.pauseQueue}
+                  </>
+                )}
+              </button>
+            </>
           )}
 
-          {/* Add Walk-In Patient */}
-          <button
-            type="button"
-            onClick={() => setIsWalkInOpen(true)}
+          <AppButton
+            variant="secondary"
+            size="sm"
             disabled={actionInProgress !== null || activeQueue?.is_paused}
-            className="inline-flex items-center gap-1.5 rounded-xl border border-zinc-200 bg-white px-3.5 py-2 text-xs font-semibold text-zinc-700 shadow-2xs hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700 disabled:opacity-50 cursor-pointer"
+            onClick={() => setIsWalkInOpen(true)}
+            icon={<UserPlus className="h-3.5 w-3.5 text-[#0284C7] dark:text-[#38BDF8]" />}
           >
-            <UserPlus className="h-4 w-4 text-zinc-500" />
             {t.addWalkIn}
-          </button>
-
-          {/* Smart CALL Button */}
-          <button
-            type="button"
-            onClick={handleSmartCall}
-            disabled={
-              actionInProgress !== null ||
-              activeQueue?.is_paused ||
-              waitingTickets.length === 0 ||
-              !!calledTicket ||
-              !!servingTicket
-            }
-            className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 text-xs font-bold text-white shadow-md shadow-indigo-500/20 hover:bg-indigo-700 disabled:opacity-50 transition-all cursor-pointer"
-          >
-            {actionInProgress === 'smart-call' ? (
-              <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent" />
-            ) : (
-              <Sparkles className="h-4 w-4" />
-            )}
-            {actionInProgress === 'smart-call' ? t.smartCalling : t.smartCall}
-          </button>
+          </AppButton>
         </div>
       </div>
 
@@ -552,545 +557,562 @@ export const QueueManagementPage: React.FC = () => {
         />
       )}
 
-      {/* Selected Queue Info Bar */}
-      {activeQueue && (
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-zinc-200 bg-white p-4 shadow-2xs dark:border-zinc-800 dark:bg-zinc-900">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-50 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300 font-bold">
-              {activeQueue.doctor.full_name.charAt(0)}
-            </div>
+      {/* Primary Two-Column Operational Cockpit */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-3.5 items-stretch lg:flex-1 lg:min-h-0">
+        {/* Left: Current Patient Focus Stage (CALLED + SERVING) */}
+        <div className="lg:col-span-6 flex flex-col gap-2.5 lg:min-h-0 lg:overflow-y-auto">
+          {/* Currently CALLED Card */}
+          <div
+            className={`rounded-2xl border p-4 shadow-2xs flex flex-col justify-between transition-all ${
+              calledTicket
+                ? 'border-amber-300/80 bg-white dark:border-amber-700/55 dark:bg-[#12243A]'
+                : 'border-[#DCE9EE] bg-white dark:border-[#253F5B] dark:bg-[#12243A]'
+            }`}
+          >
             <div>
-              <div className="flex items-center gap-2">
-                <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100">
-                  {activeQueue.doctor.full_name}
-                </h3>
-                <StatusBadge
-                  status={activeQueue.is_paused ? 'PAUSED' : 'ACTIVE'}
-                  size="sm"
-                />
-              </div>
-              <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                {activeQueue.specialization.name}
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-4 text-xs">
-            <span className="inline-flex items-center gap-1.5 rounded-lg bg-zinc-100 px-2.5 py-1 font-medium text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
-              <DoorClosed className="h-3.5 w-3.5 text-zinc-400" />
-              {activeQueue.doctor.room_number ? `${t.room} ${activeQueue.doctor.room_number}` : '—'}
-            </span>
-            <span className="text-zinc-500">
-              {t.waitingCount}: <b className="text-zinc-900 dark:text-zinc-100">{waitingTickets.length}</b>
-            </span>
-            <span className="text-zinc-500">
-              {t.completedCount}: <b className="text-zinc-900 dark:text-zinc-100">{completedTickets.length}</b>
-            </span>
-          </div>
-        </div>
-      )}
-
-      {/* Active Patients Stage (SERVING & CALLED) */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-        {/* Currently CALLED Patient */}
-        <div
-          className={`rounded-2xl border p-5 shadow-2xs transition-all ${
-            calledTicket
-              ? 'border-amber-300 bg-amber-50/30 dark:border-amber-900/50 dark:bg-amber-950/10'
-              : 'border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900'
-          }`}
-        >
-          <div className="flex items-center justify-between border-b border-zinc-100 pb-3 dark:border-zinc-800">
-            <div className="flex items-center gap-2">
-              <BellRing
-                className={`h-4 w-4 ${
-                  calledTicket ? 'text-amber-500 animate-bounce' : 'text-zinc-400'
-                }`}
-              />
-              <span className="text-xs font-bold uppercase tracking-wider text-zinc-700 dark:text-zinc-300">
-                {t.currentlyCalled}
-              </span>
-            </div>
-            {calledTicket && (
-              <div className="flex items-center gap-2">
-                {remainingSeconds !== null && (
-                  <span
-                    className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-mono font-bold tabular-nums border ${
-                      activeQueue?.is_paused
-                        ? 'border-amber-300 bg-amber-100/80 text-amber-800 dark:border-amber-800 dark:bg-amber-950/60 dark:text-amber-300'
-                        : remainingSeconds <= 15
-                          ? 'border-rose-300 bg-rose-50 text-rose-700 dark:border-rose-800 dark:bg-rose-950/50 dark:text-rose-300'
-                          : 'border-amber-300 bg-white text-amber-700 dark:border-amber-800 dark:bg-zinc-800 dark:text-amber-300'
+              <div className="flex items-center justify-between gap-2 pb-2.5 border-b border-[#DCE9EE] dark:border-[#253F5B]">
+                <div className="flex items-center gap-2">
+                  <BellRing
+                    className={`h-4 w-4 ${
+                      calledTicket ? 'text-amber-500' : 'text-[#64748B] dark:text-[#A5B4C7]'
                     }`}
-                  >
-                    <Clock className="h-3.5 w-3.5" />
-                    <span>{formatCountdownMmSs(remainingSeconds)}</span>
-                    {activeQueue?.is_paused && (
-                      <span className="font-sans text-[10px] uppercase tracking-wider">
-                        ({t.pausedCountdownBadge})
-                      </span>
-                    )}
+                  />
+                  <span className="text-xs font-bold uppercase tracking-wider text-[#14283F] dark:text-[#F1F5F9]">
+                    {t.currentlyCalled}
                   </span>
-                )}
-                <StatusBadge status="CALLED" size="sm" />
+                </div>
+                {calledTicket && <StatusBadge status="CALLED" size="sm" />}
+              </div>
+
+              {calledTicket ? (
+                <div className="mt-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="min-w-0 space-y-1">
+                    <div className="flex items-baseline gap-2.5">
+                      <span className="text-3xl sm:text-4xl font-black font-mono tabular-nums text-[#14283F] dark:text-[#F1F5F9] tracking-tight">
+                        #{String(calledTicket.ticket_number).padStart(3, '0')}
+                      </span>
+                      <span
+                        className="text-base font-bold text-[#14283F] dark:text-[#F1F5F9] truncate"
+                        title={calledTicket.patient_name}
+                      >
+                        {calledTicket.patient_name}
+                      </span>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2 text-xs text-[#64748B] dark:text-[#A5B4C7]">
+                      {activeQueue && (
+                        <span className="font-semibold text-[#0F766E] dark:text-[#2DD4BF]">
+                          {activeQueue.specialization.name} • {activeQueue.doctor.full_name}
+                        </span>
+                      )}
+                      {calledTicket.patient_phone && (
+                        <span className="inline-flex items-center gap-1">
+                          <Phone className="h-3 w-3" />
+                          {calledTicket.patient_phone}
+                        </span>
+                      )}
+                      <span className="rounded-md bg-[#EDF6F8] px-2 py-0.5 text-[11px] font-semibold text-[#14283F] dark:bg-[#1A3047] dark:text-[#F1F5F9]">
+                        {calledTicket.source === 'WALK_IN' ? t.sourceWalkIn : t.sourceOnline}
+                      </span>
+                    </div>
+                  </div>
+
+                  {remainingSeconds !== null && (
+                    <div className="shrink-0">
+                      <CountdownRing
+                        remainingSeconds={remainingSeconds}
+                        isPaused={activeQueue?.is_paused ?? false}
+                        label={t.remainingTimeLabel}
+                        pausedLabel={t.pausedCountdownBadge}
+                        size="md"
+                      />
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="py-4 text-center text-[#64748B] dark:text-[#A5B4C7] text-xs">
+                  <BellRing className="mx-auto h-5 w-5 opacity-40 mb-1" />
+                  {t.noPatientCalled}
+                </div>
+              )}
+            </div>
+
+            {calledTicket && (
+              <div className="mt-3 pt-2.5 border-t border-[#DCE9EE] dark:border-[#253F5B] space-y-2">
+                <AppButton
+                  variant="primary"
+                  size="sm"
+                  className="w-full"
+                  disabled={actionInProgress !== null}
+                  onClick={() => handleServe(calledTicket)}
+                  icon={<UserCheck className="h-4 w-4" />}
+                >
+                  {t.servePatient}
+                </AppButton>
+
+                <div className="grid grid-cols-3 gap-2">
+                  <AppButton
+                    variant="secondary"
+                    size="xs"
+                    disabled={actionInProgress !== null || calledTicket.status === 'CALLED'}
+                    title={t.callAgainDisabledHint}
+                    onClick={() => handleManualCall(calledTicket)}
+                    icon={<BellRing className="h-3.5 w-3.5 text-amber-500" />}
+                  >
+                    {t.callAgain}
+                  </AppButton>
+                  <AppButton
+                    variant="secondary"
+                    size="xs"
+                    disabled={actionInProgress !== null}
+                    onClick={() => handleSkipPrompt(calledTicket)}
+                    icon={<FastForward className="h-3.5 w-3.5" />}
+                  >
+                    {t.skipPatient}
+                  </AppButton>
+                  <AppButton
+                    variant="ghost"
+                    size="xs"
+                    disabled={actionInProgress !== null}
+                    onClick={() => handleCancelPrompt(calledTicket)}
+                    className="text-rose-600 hover:bg-rose-50 dark:text-rose-400 dark:hover:bg-rose-950/40"
+                    icon={<XCircle className="h-3.5 w-3.5" />}
+                  >
+                    {t.cancelTicket}
+                  </AppButton>
+                </div>
               </div>
             )}
           </div>
 
-          {calledTicket ? (
-            <div className="mt-4 flex flex-col justify-between h-[calc(100%-2.5rem)]">
-              <div>
-                <div className="flex items-baseline gap-3">
-                  <span className="text-3xl font-black text-amber-600 dark:text-amber-400 tracking-tight">
-                    #{calledTicket.ticket_number}
-                  </span>
-                  <span className="text-base font-bold text-zinc-900 dark:text-zinc-100">
-                    {calledTicket.patient_name}
-                  </span>
-                </div>
+          {/* Currently SERVING Compact Card */}
+          <div
+            className={`rounded-2xl border p-4 shadow-2xs flex flex-col justify-between transition-all ${
+              servingTicket
+                ? 'border-[#0D9488]/45 bg-[#DDF7F0]/35 dark:border-[#2DD4BF]/35 dark:bg-[#102E35]'
+                : 'border-[#DCE9EE] bg-white dark:border-[#253F5B] dark:bg-[#12243A]'
+            }`}
+          >
+            <div className="flex items-center justify-between gap-2 pb-2 border-b border-[#DCE9EE]/80 dark:border-[#253F5B]/80">
+              <div className="flex items-center gap-2">
+                <UserCheck
+                  className={`h-4 w-4 ${
+                    servingTicket
+                      ? 'text-[#0D9488] dark:text-[#2DD4BF]'
+                      : 'text-[#64748B] dark:text-[#A5B4C7]'
+                  }`}
+                />
+                <span className="text-xs font-bold uppercase tracking-wider text-[#14283F] dark:text-[#F1F5F9]">
+                  {t.currentlyServing}
+                </span>
+              </div>
+              {servingTicket && <StatusBadge status="SERVING" size="sm" />}
+            </div>
 
-                <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-zinc-500">
-                  {calledTicket.patient_phone && (
-                    <span className="inline-flex items-center gap-1">
-                      <Phone className="h-3.5 w-3.5 text-zinc-400" />
-                      {calledTicket.patient_phone}
+            {servingTicket ? (
+              <div className="mt-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="flex items-baseline gap-2.5">
+                    <span className="text-2xl font-black font-mono tabular-nums text-[#0F766E] dark:text-[#2DD4BF]">
+                      #{String(servingTicket.ticket_number).padStart(3, '0')}
                     </span>
-                  )}
-                  <span>
-                    {calledTicket.source === 'WALK_IN' ? t.sourceWalkIn : t.sourceOnline}
-                  </span>
-                </div>
-              </div>
-
-              {/* CALLED Actions */}
-              <div className="mt-6 pt-3 border-t border-amber-200/50 dark:border-amber-900/30 space-y-2">
-                <div className="flex flex-wrap items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => handleServe(calledTicket)}
-                    disabled={actionInProgress !== null}
-                    className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-3.5 py-1.5 text-xs font-bold text-white shadow-xs hover:bg-emerald-700 disabled:opacity-50 transition-colors cursor-pointer"
-                  >
-                    <UserCheck className="h-3.5 w-3.5" />
-                    {t.servePatient}
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => handleManualCall(calledTicket)}
-                    disabled={actionInProgress !== null || calledTicket.status === 'CALLED'}
-                    title={t.callAgainDisabledHint}
-                    className="inline-flex items-center gap-1.5 rounded-xl border border-amber-300 bg-white px-3 py-1.5 text-xs font-semibold text-amber-800 hover:bg-amber-50 dark:border-amber-800 dark:bg-zinc-800 dark:text-amber-300 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                  >
-                    <BellRing className="h-3.5 w-3.5" />
-                    {t.callAgain}
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => handleSkipPrompt(calledTicket)}
-                    disabled={actionInProgress !== null}
-                    className="inline-flex items-center gap-1.5 rounded-xl border border-zinc-200 bg-white px-3 py-1.5 text-xs font-semibold text-zinc-600 hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 disabled:opacity-50 transition-colors"
-                  >
-                    <FastForward className="h-3.5 w-3.5" />
-                    {t.skipPatient}
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => handleCancelPrompt(calledTicket)}
-                    disabled={actionInProgress !== null}
-                    className="inline-flex items-center gap-1.5 rounded-xl border border-rose-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-rose-600 hover:bg-rose-50 dark:border-rose-900/60 dark:bg-zinc-800 dark:text-rose-400 disabled:opacity-50 transition-colors"
-                  >
-                    <XCircle className="h-3.5 w-3.5" />
-                    {t.cancelTicket}
-                  </button>
+                    <span
+                      className="text-sm font-bold text-[#14283F] dark:text-[#F1F5F9] truncate"
+                      title={servingTicket.patient_name}
+                    >
+                      {servingTicket.patient_name}
+                    </span>
+                  </div>
+                  <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-[#64748B] dark:text-[#A5B4C7]">
+                    {servingTicket.patient_phone && (
+                      <span className="inline-flex items-center gap-1">
+                        <Phone className="h-3 w-3" />
+                        {servingTicket.patient_phone}
+                      </span>
+                    )}
+                    <span className="rounded-md bg-white/80 px-2 py-0.5 text-[11px] font-semibold text-[#14283F] dark:bg-[#12243A] dark:text-[#F1F5F9]">
+                      {servingTicket.source === 'WALK_IN' ? t.sourceWalkIn : t.sourceOnline}
+                    </span>
+                  </div>
                 </div>
 
-                <p className="text-[11px] font-medium text-amber-800/80 dark:text-amber-300/80">
-                  {t.callAgainDisabledHint}
-                </p>
+                <AppButton
+                  variant="primary"
+                  size="sm"
+                  disabled={actionInProgress !== null}
+                  onClick={() => handleComplete(servingTicket)}
+                  icon={<CheckCircle className="h-3.5 w-3.5" />}
+                >
+                  {t.completePatient}
+                </AppButton>
               </div>
-            </div>
-          ) : (
-            <div className="py-10 text-center text-zinc-400 text-xs">
-              <BellRing className="mx-auto h-7 w-7 text-zinc-300 mb-1" />
-              {t.noPatientCalled}
-            </div>
-          )}
+            ) : (
+              <div className="py-3 text-center text-[#64748B] dark:text-[#A5B4C7] text-xs">
+                {t.noPatientInService}
+              </div>
+            )}
+          </div>
         </div>
 
-        {/* Currently SERVING Patient */}
-        <div
-          className={`rounded-2xl border p-5 shadow-2xs transition-all ${
-            servingTicket
-              ? 'border-emerald-300 bg-emerald-50/30 dark:border-emerald-900/50 dark:bg-emerald-950/10'
-              : 'border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900'
-          }`}
-        >
-          <div className="flex items-center justify-between border-b border-zinc-100 pb-3 dark:border-zinc-800">
-            <div className="flex items-center gap-2">
-              <UserCheck
-                className={`h-4 w-4 ${
-                  servingTicket ? 'text-emerald-500' : 'text-zinc-400'
-                }`}
-              />
-              <span className="text-xs font-bold uppercase tracking-wider text-zinc-700 dark:text-zinc-300">
-                {t.currentlyServing}
-              </span>
-            </div>
-            {servingTicket && <StatusBadge status="SERVING" size="sm" />}
-          </div>
-
-          {servingTicket ? (
-            <div className="mt-4 flex flex-col justify-between h-[calc(100%-2.5rem)]">
-              <div>
-                <div className="flex items-baseline gap-3">
-                  <span className="text-3xl font-black text-emerald-600 dark:text-emerald-400 tracking-tight">
-                    #{servingTicket.ticket_number}
-                  </span>
-                  <span className="text-base font-bold text-zinc-900 dark:text-zinc-100">
-                    {servingTicket.patient_name}
-                  </span>
-                </div>
-
-                <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-zinc-500">
-                  {servingTicket.patient_phone && (
-                    <span className="inline-flex items-center gap-1">
-                      <Phone className="h-3.5 w-3.5 text-zinc-400" />
-                      {servingTicket.patient_phone}
-                    </span>
-                  )}
-                  <span>
-                    {servingTicket.source === 'WALK_IN' ? t.sourceWalkIn : t.sourceOnline}
-                  </span>
-                </div>
-              </div>
-
-              {/* SERVING Actions */}
-              <div className="mt-6 flex items-center gap-3 pt-3 border-t border-emerald-200/50 dark:border-emerald-900/30">
+        {/* Right: Tabbed Queue Stream (Waiting / Completed / Skipped) + Pinned Smart Call Next */}
+        <div className="lg:col-span-6 rounded-2xl border border-[#DCE9EE] bg-white shadow-2xs dark:border-[#253F5B] dark:bg-[#12243A] flex flex-col overflow-hidden lg:h-full lg:min-h-0">
+          {/* Card Header Tabs & Filter */}
+          <div className="shrink-0 px-3.5 py-2.5 border-b border-[#DCE9EE] bg-[#F5FAFB]/70 dark:border-[#253F5B] dark:bg-[#0B1728]/40 space-y-2">
+            <div className="flex items-center justify-between gap-2 overflow-x-auto">
+              <div
+                role="tablist"
+                aria-label={t.waitingPatients}
+                className="inline-flex items-center rounded-xl border border-[#DCE9EE] bg-white p-0.5 dark:border-[#253F5B] dark:bg-[#12243A] whitespace-nowrap"
+              >
                 <button
                   type="button"
-                  onClick={() => handleComplete(servingTicket)}
-                  disabled={actionInProgress !== null}
-                  className="inline-flex items-center gap-1.5 rounded-xl bg-zinc-900 px-4 py-2 text-xs font-bold text-white shadow-xs hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200 disabled:opacity-50 transition-colors cursor-pointer"
+                  role="tab"
+                  aria-selected={activeListTab === 'WAITING'}
+                  onClick={() => setActiveListTab('WAITING')}
+                  className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-[11px] font-semibold transition-colors cursor-pointer whitespace-nowrap ${
+                    activeListTab === 'WAITING'
+                      ? 'bg-[#0D9488] text-white dark:bg-[#14B8A6] dark:text-[#07131D]'
+                      : 'text-[#64748B] hover:text-[#14283F] dark:text-[#A5B4C7] dark:hover:text-[#F1F5F9]'
+                  }`}
                 >
-                  <CheckCircle className="h-3.5 w-3.5" />
-                  {t.completePatient}
+                  <span>{t.waitingCount}</span>
+                  <span className="tabular-nums opacity-85">({waitingTickets.length})</span>
+                </button>
+
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={activeListTab === 'COMPLETED'}
+                  onClick={() => setActiveListTab('COMPLETED')}
+                  className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-[11px] font-semibold transition-colors cursor-pointer whitespace-nowrap ${
+                    activeListTab === 'COMPLETED'
+                      ? 'bg-[#0D9488] text-white dark:bg-[#14B8A6] dark:text-[#07131D]'
+                      : 'text-[#64748B] hover:text-[#14283F] dark:text-[#A5B4C7] dark:hover:text-[#F1F5F9]'
+                  }`}
+                >
+                  <span>{t.completedCount}</span>
+                  <span className="tabular-nums opacity-85">({completedTickets.length})</span>
+                </button>
+
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={activeListTab === 'INACTIVE'}
+                  onClick={() => setActiveListTab('INACTIVE')}
+                  className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-[11px] font-semibold transition-colors cursor-pointer whitespace-nowrap ${
+                    activeListTab === 'INACTIVE'
+                      ? 'bg-[#0D9488] text-white dark:bg-[#14B8A6] dark:text-[#07131D]'
+                      : 'text-[#64748B] hover:text-[#14283F] dark:text-[#A5B4C7] dark:hover:text-[#F1F5F9]'
+                  }`}
+                >
+                  <span>{t.inactivePatients}</span>
+                  <span className="tabular-nums opacity-85">({inactiveTickets.length})</span>
                 </button>
               </div>
             </div>
-          ) : (
-            <div className="py-10 text-center text-zinc-400 text-xs">
-              <UserCheck className="mx-auto h-7 w-7 text-zinc-300 mb-1" />
-              {t.noPatientInService}
-            </div>
-          )}
-        </div>
-      </div>
 
-      {/* Waiting Room Table */}
-      <div className="rounded-2xl border border-zinc-200 bg-white shadow-2xs overflow-hidden dark:border-zinc-800 dark:bg-zinc-900">
-        <div className="border-b border-zinc-200 bg-zinc-50/50 px-6 py-4 dark:border-zinc-800 dark:bg-zinc-900/50 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Clock className="h-4 w-4 text-blue-500" />
-            <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100">
-              {t.waitingPatients}
-            </h3>
-            <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-bold text-blue-700 dark:bg-blue-950 dark:text-blue-300">
-              {waitingTickets.length}
-            </span>
-          </div>
-        </div>
+            {activeListTab === 'WAITING' && (
+              <div className="flex flex-col sm:flex-row gap-2">
+                <div className="relative flex-1">
+                  <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[#64748B] dark:text-[#A5B4C7]" />
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder={t.searchPatientsPlaceholder}
+                    className="w-full rounded-xl border border-[#DCE9EE] bg-white py-1.5 pl-8 pr-3 text-xs text-[#14283F] placeholder-[#64748B]/75 focus:border-[#0D9488] focus:outline-hidden focus:ring-2 focus:ring-[#0D9488]/20 dark:border-[#253F5B] dark:bg-[#1A3047] dark:text-[#F1F5F9] dark:placeholder-[#A5B4C7]/70 dark:focus:border-[#2DD4BF] dark:focus:bg-[#0B1728]"
+                  />
+                </div>
 
-        {isLoadingTickets ? (
-          <div className="p-12 text-center">
-            <div className="inline-block h-7 w-7 animate-spin rounded-full border-2 border-indigo-600 border-t-transparent" />
-            <p className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">{t.loading}</p>
+                <select
+                  value={checkInFilter}
+                  onChange={(e) =>
+                    setCheckInFilter(e.target.value as 'ALL' | 'CHECKED_IN' | 'NOT_CHECKED_IN')
+                  }
+                  aria-label={t.checkInState}
+                  className="rounded-xl border border-[#DCE9EE] bg-white px-3 py-1.5 text-xs font-semibold text-[#14283F] focus:border-[#0D9488] focus:outline-hidden dark:border-[#253F5B] dark:bg-[#1A3047] dark:text-[#F1F5F9] dark:[&_option]:bg-[#12243A] dark:[&_option]:text-[#F1F5F9]"
+                >
+                  <option value="ALL">{t.allStatuses}</option>
+                  <option value="CHECKED_IN">{t.checkedIn}</option>
+                  <option value="NOT_CHECKED_IN">{t.notCheckedIn}</option>
+                </select>
+              </div>
+            )}
           </div>
-        ) : waitingTickets.length === 0 ? (
-          <div className="p-10 text-center text-zinc-400 text-xs">
-            <Clock className="mx-auto h-8 w-8 text-zinc-300 mb-1" />
-            {t.noWaitingPatients}
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
-              <thead className="border-b border-zinc-200 bg-zinc-50 text-[11px] font-bold uppercase tracking-wider text-zinc-500 dark:border-zinc-800 dark:bg-zinc-800/40 dark:text-zinc-400">
-                <tr>
-                  <th scope="col" className="px-5 py-3 text-center">
-                    {t.position}
-                  </th>
-                  <th scope="col" className="px-5 py-3">
-                    {t.ticketNumber}
-                  </th>
-                  <th scope="col" className="px-5 py-3">
-                    {t.patientName}
-                  </th>
-                  <th scope="col" className="px-5 py-3">
-                    {t.patientPhone}
-                  </th>
-                  <th scope="col" className="px-5 py-3">
-                    {t.source}
-                  </th>
-                  <th scope="col" className="px-5 py-3">
-                    {t.checkInState}
-                  </th>
-                  <th scope="col" className="px-5 py-3 text-center">
-                    {t.missedTurnsCount}
-                  </th>
-                  <th scope="col" className="px-5 py-3 text-right">
-                    {t.actions}
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800">
-                {waitingTickets.map((ticket, index) => {
+
+          {/* Independently Scrollable List Area (Patients only) */}
+          <div className="flex-1 min-h-0 p-3 space-y-2 max-h-[380px] lg:max-h-none overflow-y-auto">
+            {isLoadingTickets ? (
+              <LoadingSkeleton rows={4} />
+            ) : activeListTab === 'WAITING' ? (
+              filteredWaitingTickets.length === 0 ? (
+                <EmptyState title={t.noWaitingPatients} compact />
+              ) : (
+                filteredWaitingTickets.map((ticket, index) => {
                   const isCheckedIn = ticket.checked_in_at !== null;
-                  const isBusy = actionInProgress === `call-${ticket.id}` ||
+                  const isBusy =
+                    actionInProgress === `call-${ticket.id}` ||
                     actionInProgress === `checkin-${ticket.id}` ||
                     actionInProgress === `missturn-${ticket.id}` ||
                     actionInProgress === `skip-${ticket.id}` ||
                     actionInProgress === `cancel-${ticket.id}`;
 
                   return (
-                    <tr
+                    <div
                       key={ticket.id}
-                      className="hover:bg-zinc-50/80 dark:hover:bg-zinc-800/50 transition-colors"
+                      className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 rounded-xl border border-[#DCE9EE] bg-[#F5FAFB]/55 px-3 py-2.5 hover:border-[#0D9488]/40 hover:bg-white transition-colors dark:border-[#253F5B] dark:bg-[#0B1728]/50 dark:hover:border-[#2DD4BF]/40 dark:hover:bg-[#1A3047]/65"
                     >
-                      {/* Position */}
-                      <td className="px-5 py-3.5 text-center font-bold text-zinc-400 text-xs whitespace-nowrap">
-                        {index + 1}
-                      </td>
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className="flex h-9 min-w-13 shrink-0 items-center justify-center rounded-xl bg-[#DDF7F0] px-2 font-mono text-xs font-black tabular-nums text-[#0F766E] dark:bg-[#12353D] dark:text-[#2DD4BF]">
+                          #{String(ticket.ticket_number).padStart(3, '0')}
+                        </div>
 
-                      {/* Ticket Number */}
-                      <td className="px-5 py-3.5 font-black text-indigo-600 dark:text-indigo-400 whitespace-nowrap">
-                        #{ticket.ticket_number}
-                      </td>
-
-                      {/* Patient Name */}
-                      <td className="px-5 py-3.5 font-semibold text-zinc-900 dark:text-zinc-100 whitespace-nowrap">
-                        {ticket.patient_name}
-                      </td>
-
-                      {/* Phone */}
-                      <td className="px-5 py-3.5 text-zinc-500 whitespace-nowrap">
-                        {ticket.patient_phone || '—'}
-                      </td>
-
-                      {/* Source */}
-                      <td className="px-5 py-3.5 whitespace-nowrap text-xs">
-                        {ticket.source === 'WALK_IN' ? (
-                          <span className="inline-flex items-center rounded-md bg-purple-50 px-2 py-0.5 font-semibold text-purple-700 dark:bg-purple-950/40 dark:text-purple-300">
-                            {t.sourceWalkIn}
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center rounded-md bg-zinc-100 px-2 py-0.5 font-medium text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
-                            {t.sourceOnline}
-                          </span>
-                        )}
-                      </td>
-
-                      {/* Check-In State */}
-                      <td className="px-5 py-3.5 whitespace-nowrap">
-                        {isCheckedIn ? (
-                          <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">
-                            <CheckCircle2 className="h-3 w-3 text-emerald-600" />
-                            {t.checkedIn}
-                            {ticket.check_in_method && (
-                              <span className="text-[10px] text-emerald-500 uppercase">
-                                ({ticket.check_in_method})
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span
+                              className="text-xs sm:text-sm font-bold text-[#14283F] dark:text-[#F1F5F9] truncate"
+                              title={ticket.patient_name}
+                            >
+                              {ticket.patient_name}
+                            </span>
+                            <span className="text-[10px] font-bold text-[#64748B] dark:text-[#A5B4C7] tabular-nums">
+                              #{index + 1}
+                            </span>
+                            {ticket.missed_turns > 0 && (
+                              <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-800 dark:bg-amber-950 dark:text-amber-300">
+                                ↻ {ticket.missed_turns}
                               </span>
                             )}
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700 dark:bg-amber-950/40 dark:text-amber-300">
-                            <Clock className="h-3 w-3 text-amber-500" />
-                            {t.notCheckedIn}
-                          </span>
-                        )}
-                      </td>
+                          </div>
 
-                      {/* Missed Turns */}
-                      <td className="px-5 py-3.5 text-center whitespace-nowrap">
-                        {ticket.missed_turns > 0 ? (
-                          <span className="inline-flex items-center justify-center rounded-full bg-amber-100 px-2 py-0.5 text-xs font-bold text-amber-800 dark:bg-amber-900 dark:text-amber-200">
-                            {ticket.missed_turns}
-                          </span>
-                        ) : (
-                          <span className="text-xs text-zinc-400">0</span>
-                        )}
-                      </td>
-
-                      {/* Actions */}
-                      <td className="px-5 py-3.5 text-right whitespace-nowrap">
-                        <div className="flex items-center justify-end gap-1.5">
-                          {/* Manual Call */}
-                          <button
-                            type="button"
-                            title={t.manualCall}
-                            onClick={() => handleManualCall(ticket)}
-                            disabled={
-                              isBusy ||
-                              actionInProgress !== null ||
-                              activeQueue?.is_paused ||
-                              !!calledTicket ||
-                              !!servingTicket
-                            }
-                            className="inline-flex items-center gap-1 rounded-lg bg-indigo-50 px-2.5 py-1 text-xs font-bold text-indigo-700 hover:bg-indigo-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                          >
-                            <BellRing className="h-3.5 w-3.5" />
-                            <span>{t.manualCall}</span>
-                          </button>
-
-                          {/* Manual Check-in (if online and not yet checked in) */}
-                          {!isCheckedIn && ticket.source === 'ONLINE' && (
-                            <button
-                              type="button"
-                              title={t.manualCheckIn}
-                              onClick={() => handleManualCheckIn(ticket)}
-                              disabled={isBusy || actionInProgress !== null}
-                              className="inline-flex items-center gap-1 rounded-lg border border-emerald-200 bg-white px-2 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-50 disabled:opacity-40 transition-colors"
-                            >
-                              <CheckCircle className="h-3.5 w-3.5" />
-                              <span className="hidden xl:inline">{t.manualCheckIn}</span>
-                            </button>
-                          )}
-
-                          {/* Miss Turn (if waiting & not checked in) */}
-                          {!isCheckedIn && (
-                            <button
-                              type="button"
-                              title={t.missTurn}
-                              onClick={() => handleMissTurnPrompt(ticket)}
-                              disabled={isBusy || actionInProgress !== null}
-                              className="inline-flex items-center gap-1 rounded-lg border border-amber-200 bg-white px-2 py-1 text-xs font-semibold text-amber-700 hover:bg-amber-50 disabled:opacity-40 transition-colors"
-                            >
-                              <FastForward className="h-3.5 w-3.5" />
-                              <span className="hidden xl:inline">{t.missTurn}</span>
-                            </button>
-                          )}
-
-                          {/* Skip */}
-                          <button
-                            type="button"
-                            title={t.skipPatient}
-                            onClick={() => handleSkipPrompt(ticket)}
-                            disabled={isBusy || actionInProgress !== null}
-                            className="inline-flex items-center rounded-lg p-1 text-zinc-500 hover:bg-zinc-100 hover:text-zinc-700 disabled:opacity-40"
-                          >
-                            <FastForward className="h-4 w-4" />
-                          </button>
-
-                          {/* Cancel */}
-                          <button
-                            type="button"
-                            title={t.cancelTicket}
-                            onClick={() => handleCancelPrompt(ticket)}
-                            disabled={isBusy || actionInProgress !== null}
-                            className="inline-flex items-center rounded-lg p-1 text-rose-500 hover:bg-rose-50 hover:text-rose-700 disabled:opacity-40"
-                          >
-                            <XCircle className="h-4 w-4" />
-                          </button>
+                          <div className="mt-0.5 flex items-center gap-1.5 text-[11px] text-[#64748B] dark:text-[#A5B4C7] truncate">
+                            {isCheckedIn ? (
+                              <span className="inline-flex items-center gap-1 font-semibold text-emerald-700 dark:text-emerald-300 shrink-0">
+                                <CheckCircle2 className="h-3 w-3" />
+                                {t.checkedIn}
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 text-amber-700 dark:text-amber-300 shrink-0">
+                                <Clock className="h-3 w-3" />
+                                {t.notCheckedIn}
+                              </span>
+                            )}
+                            <span className="shrink-0">• {ticket.source === 'WALK_IN' ? t.sourceWalkIn : t.sourceOnline}</span>
+                            {ticket.patient_phone && <span className="hidden sm:inline tabular-nums truncate">• {ticket.patient_phone}</span>}
+                          </div>
                         </div>
-                      </td>
-                    </tr>
+                      </div>
+
+                      <div className="flex flex-wrap items-center justify-end gap-1.5 shrink-0">
+                        {isCheckedIn && (
+                          <span className="rounded-lg bg-emerald-50 px-2 py-1 text-[11px] font-bold text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300">
+                            {t.patientReadyBadge}
+                          </span>
+                        )}
+
+                        <AppButton
+                          variant="blue"
+                          size="xs"
+                          title={t.manualCall}
+                          disabled={
+                            isBusy ||
+                            actionInProgress !== null ||
+                            activeQueue?.is_paused ||
+                            !!calledTicket ||
+                            !!servingTicket
+                          }
+                          onClick={() => handleManualCall(ticket)}
+                          icon={<BellRing className="h-3.5 w-3.5" />}
+                        >
+                          {t.manualCall}
+                        </AppButton>
+
+                        {!isCheckedIn && ticket.source === 'ONLINE' && (
+                          <AppButton
+                            variant="secondary"
+                            size="xs"
+                            title={t.manualCheckIn}
+                            disabled={isBusy || actionInProgress !== null}
+                            onClick={() => handleManualCheckIn(ticket)}
+                            icon={<CheckCircle className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />}
+                          />
+                        )}
+
+                        {!isCheckedIn && (
+                          <AppButton
+                            variant="secondary"
+                            size="xs"
+                            title={t.missTurn}
+                            disabled={isBusy || actionInProgress !== null}
+                            onClick={() => handleMissTurnPrompt(ticket)}
+                            icon={<FastForward className="h-3.5 w-3.5 text-amber-500" />}
+                          />
+                        )}
+
+                        <button
+                          type="button"
+                          title={t.skipPatient}
+                          onClick={() => handleSkipPrompt(ticket)}
+                          disabled={isBusy || actionInProgress !== null}
+                          className="inline-flex items-center rounded-lg p-1.5 text-[#64748B] hover:bg-[#EDF6F8] hover:text-[#14283F] dark:text-[#A5B4C7] dark:hover:bg-[#1A3047] dark:hover:text-[#F1F5F9] disabled:opacity-40 cursor-pointer"
+                        >
+                          <FastForward className="h-4 w-4" />
+                        </button>
+
+                        <button
+                          type="button"
+                          title={t.cancelTicket}
+                          onClick={() => handleCancelPrompt(ticket)}
+                          disabled={isBusy || actionInProgress !== null}
+                          className="inline-flex items-center rounded-lg p-1.5 text-rose-500 hover:bg-rose-50 hover:text-rose-700 dark:hover:bg-rose-950/40 disabled:opacity-40 cursor-pointer"
+                        >
+                          <XCircle className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </div>
                   );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
-
-      {/* Completed Patients Section */}
-      {completedTickets.length > 0 && (
-        <div className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-2xs dark:border-zinc-800 dark:bg-zinc-900">
-          <div className="flex items-center justify-between border-b border-zinc-100 pb-3 dark:border-zinc-800">
-            <div className="flex items-center gap-2">
-              <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-              <span className="font-bold text-xs uppercase tracking-wider text-zinc-700 dark:text-zinc-300">
-                {t.completedCount} ({completedTickets.length})
-              </span>
-            </div>
-          </div>
-
-          <div className="mt-3 divide-y divide-zinc-100 dark:divide-zinc-800">
-            {completedTickets.map((ticket) => (
-              <div
-                key={ticket.id}
-                className="py-3 flex items-center justify-between gap-3 text-xs"
-              >
-                <div className="flex items-center gap-3">
-                  <span className="font-black text-zinc-500">
-                    #{ticket.ticket_number}
-                  </span>
-                  <span className="font-semibold text-zinc-800 dark:text-zinc-200">
-                    {ticket.patient_name}
-                  </span>
-                  <span
-                    className={`rounded-md px-2 py-0.5 text-[10px] font-bold uppercase ${
-                      ticket.source === 'ONLINE'
-                        ? 'bg-sky-50 text-sky-700 dark:bg-sky-950/50 dark:text-sky-300'
-                        : 'bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300'
-                    }`}
+                })
+              )
+            ) : activeListTab === 'COMPLETED' ? (
+              completedTickets.length === 0 ? (
+                <EmptyState title={t.noData} compact />
+              ) : (
+                completedTickets.map((ticket) => (
+                  <div
+                    key={ticket.id}
+                    className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[#DCE9EE] bg-[#F5FAFB]/55 p-3 text-xs dark:border-[#253F5B] dark:bg-[#0B1728]/50"
                   >
-                    {ticket.source === 'ONLINE' ? t.sourceOnline : t.sourceWalkIn}
-                  </span>
-                  <StatusBadge status={ticket.status} size="sm" />
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+                    <div className="flex items-center gap-3 min-w-0">
+                      <span className="font-mono font-black tabular-nums text-[#0F766E] dark:text-[#2DD4BF]">
+                        #{String(ticket.ticket_number).padStart(3, '0')}
+                      </span>
+                      <span className="font-semibold text-[#14283F] dark:text-[#F1F5F9] truncate">
+                        {ticket.patient_name}
+                      </span>
+                      <span className="rounded-md bg-[#E0F2FE] px-2 py-0.5 text-[10px] font-bold uppercase text-[#0369A1] dark:bg-[#10324F] dark:text-[#38BDF8]">
+                        {ticket.source === 'ONLINE' ? t.sourceOnline : t.sourceWalkIn}
+                      </span>
+                    </div>
+                    <StatusBadge status={ticket.status} size="sm" />
+                  </div>
+                ))
+              )
+            ) : inactiveTickets.length === 0 ? (
+              <EmptyState title={t.noData} compact />
+            ) : (
+              inactiveTickets.map((ticket) => (
+                <div
+                  key={ticket.id}
+                  className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[#DCE9EE] bg-[#F5FAFB]/55 p-3 text-xs dark:border-[#253F5B] dark:bg-[#0B1728]/50"
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <span className="font-mono font-black tabular-nums text-[#64748B] dark:text-[#A5B4C7]">
+                      #{String(ticket.ticket_number).padStart(3, '0')}
+                    </span>
+                    <span className="font-semibold text-[#14283F] dark:text-[#F1F5F9] truncate">
+                      {ticket.patient_name}
+                    </span>
+                    <StatusBadge status={ticket.status} size="sm" />
+                  </div>
 
-      {/* Inactive / Skipped / Cancelled Section */}
-      {inactiveTickets.length > 0 && (
-        <details className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-2xs dark:border-zinc-800 dark:bg-zinc-900 group">
-          <summary className="flex items-center justify-between cursor-pointer list-none font-bold text-xs uppercase tracking-wider text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200">
-            <span>
-              {t.inactivePatients} ({inactiveTickets.length})
-            </span>
-            <span className="text-xs transition-transform group-open:rotate-180">▼</span>
-          </summary>
-
-          <div className="mt-4 divide-y divide-zinc-100 dark:divide-zinc-800">
-            {inactiveTickets.map((ticket) => (
-              <div
-                key={ticket.id}
-                className="py-3 flex items-center justify-between gap-3 text-xs"
-              >
-                <div className="flex items-center gap-3">
-                  <span className="font-black text-zinc-400">
-                    #{ticket.ticket_number}
-                  </span>
-                  <span className="font-semibold text-zinc-800 dark:text-zinc-200">
-                    {ticket.patient_name}
-                  </span>
-                  <StatusBadge status={ticket.status} size="sm" />
-                </div>
-
-                <div className="flex items-center gap-2">
                   {ticket.status === 'SKIPPED' && (
-                    <button
-                      type="button"
-                      onClick={() => handleRestore(ticket)}
+                    <AppButton
+                      variant="secondary"
+                      size="xs"
                       disabled={actionInProgress !== null}
-                      className="inline-flex items-center gap-1 rounded-lg border border-indigo-200 bg-indigo-50/50 px-2.5 py-1 text-xs font-semibold text-indigo-700 hover:bg-indigo-100 disabled:opacity-50"
+                      onClick={() => handleRestore(ticket)}
+                      icon={<RotateCcw className="h-3.5 w-3.5 text-[#0D9488] dark:text-[#2DD4BF]" />}
                     >
-                      <RotateCcw className="h-3.5 w-3.5" />
                       {t.restorePatient}
-                    </button>
+                    </AppButton>
                   )}
                 </div>
-              </div>
-            ))}
+              ))
+            )}
           </div>
-        </details>
-      )}
 
-      {/* Confirmation Modal */}
+          {/* Pinned Bottom Primary CTA: Smart Call Next */}
+          <div className="shrink-0 p-3 border-t border-[#DCE9EE] bg-[#F5FAFB]/80 dark:border-[#253F5B] dark:bg-[#0B1728]/60">
+            <AppButton
+              variant="primary"
+              size="md"
+              className="w-full"
+              loading={actionInProgress === 'smart-call'}
+              disabled={
+                actionInProgress !== null ||
+                activeQueue?.is_paused ||
+                waitingTickets.length === 0 ||
+                !!calledTicket ||
+                !!servingTicket
+              }
+              onClick={handleSmartCall}
+              icon={<Sparkles className="h-4 w-4" />}
+            >
+              {actionInProgress === 'smart-call' ? t.smartCalling : t.smartCall}
+            </AppButton>
+          </div>
+        </div>
+      </div>
+
+      {/* Bottom Compact 4-Card KPI Strip (Image 1 Style) */}
+      <div className="shrink-0 grid grid-cols-2 lg:grid-cols-4 gap-2.5">
+        <div className="flex items-center gap-3 rounded-2xl border border-[#DCE9EE] bg-white px-3.5 py-2.5 shadow-2xs dark:border-[#253F5B] dark:bg-[#12243A]">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-[#EDF6F8] text-[#14283F] dark:bg-[#1A3047] dark:text-[#F1F5F9]">
+            <Layers className="h-4 w-4" />
+          </div>
+          <div>
+            <p className="text-base font-black tabular-nums leading-tight text-[#14283F] dark:text-[#F1F5F9]">
+              {tickets.length}
+            </p>
+            <p className="text-[11px] font-medium text-[#64748B] dark:text-[#A5B4C7]">
+              {t.adminKpiTotalTickets}
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-3 rounded-2xl border border-[#DCE9EE] bg-white px-3.5 py-2.5 shadow-2xs dark:border-[#253F5B] dark:bg-[#12243A]">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-[#E0F2FE] text-[#0369A1] dark:bg-[#10324F] dark:text-[#38BDF8]">
+            <Clock className="h-4 w-4" />
+          </div>
+          <div>
+            <p className="text-base font-black tabular-nums leading-tight text-[#14283F] dark:text-[#F1F5F9]">
+              {waitingTickets.length}
+            </p>
+            <p className="text-[11px] font-medium text-[#64748B] dark:text-[#A5B4C7]">
+              {t.waitingCount}
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-3 rounded-2xl border border-[#DCE9EE] bg-white px-3.5 py-2.5 shadow-2xs dark:border-[#253F5B] dark:bg-[#12243A]">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-[#DDF7F0] text-[#0F766E] dark:bg-[#12353D] dark:text-[#2DD4BF]">
+            <Users className="h-4 w-4" />
+          </div>
+          <div>
+            <p className="text-base font-black tabular-nums leading-tight text-[#14283F] dark:text-[#F1F5F9]">
+              {servingTicket ? 1 : 0}
+            </p>
+            <p className="text-[11px] font-medium text-[#64748B] dark:text-[#A5B4C7]">
+              {t.servingCount}
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-3 rounded-2xl border border-[#DCE9EE] bg-white px-3.5 py-2.5 shadow-2xs dark:border-[#253F5B] dark:bg-[#12243A]">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300">
+            <CheckCircle2 className="h-4 w-4" />
+          </div>
+          <div>
+            <p className="text-base font-black tabular-nums leading-tight text-[#14283F] dark:text-[#F1F5F9]">
+              {completedTickets.length}
+            </p>
+            <p className="text-[11px] font-medium text-[#64748B] dark:text-[#A5B4C7]">
+              {t.completedCount}
+            </p>
+          </div>
+        </div>
+      </div>
+
       <ConfirmModal
         isOpen={confirmModalState.isOpen}
         title={confirmModalState.title}
@@ -1102,7 +1124,6 @@ export const QueueManagementPage: React.FC = () => {
         onCancel={() => setConfirmModalState((prev) => ({ ...prev, isOpen: false }))}
       />
 
-      {/* Walk-In Modal */}
       <WalkInModal
         isOpen={isWalkInOpen}
         isLoading={actionInProgress === 'add-walk-in'}

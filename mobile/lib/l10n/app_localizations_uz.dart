@@ -686,4 +686,34 @@ class AppLocalizationsUz extends AppLocalizations {
   @override
   String get syncConnectionWarning =>
       'Aloqa uzildi. Oxirgi maʼlumotlar ko‘rsatilmoqda, qayta ulanilmoqda...';
+
+  @override
+  String get themeSectionTitle => 'Tashqi ko‘rinish';
+
+  @override
+  String get themeLight => 'Yorug‘';
+
+  @override
+  String get themeDark => 'Tungi';
+
+  @override
+  String get themeSystem => 'Tizim';
+
+  @override
+  String get quickAccessTitle => 'Tezkor xizmatlar';
+
+  @override
+  String get activeVisitStatusTitle => 'Faol tashrif';
+
+  @override
+  String get viewLiveQueueLabel => 'Jonli navbat';
+
+  @override
+  String get clinicPortalBadge => 'Stomatologiya klinikasi';
+
+  @override
+  String get searchSpecialtiesHint => 'Mutaxassislikni qidirish...';
+
+  @override
+  String get chooseCareSubtitle => 'Shifokorlarni ko‘rish uchun tanlang';
 }

@@ -270,4 +270,39 @@ export interface TranslationDictionary {
   adminDoctorQueueStatusOpen: string;
   adminDoctorQueueStatusClosed: string;
   adminNoQueuesToday: string;
+  adminProgressTitle: string;
+  adminProgressSummaryTemplate: string;
+  adminShareSummaryTemplate: string;
+  adminNoTicketsIssuedToday: string;
+  adminActiveInQueueLabel: string;
+  adminSkippedCancelledLabel: string;
+  adminFilterOpen: string;
+  adminFilterClosed: string;
+  adminViewCards: string;
+  adminViewTable: string;
+  adminSearchDoctorPlaceholder: string;
+  adminNoDoctorsMatchFilter: string;
+  adminTicketsSuffix: string;
+  queueProgressColumn: string;
+  patientReadyBadge: string;
+  todayShortLabel: string;
+
+  // Theme & UI Controls
+  themeLabel: string;
+  themeLight: string;
+  themeDark: string;
+  themeSystem: string;
+  showClinicQr: string;
+  clinicQrTitle: string;
+  clinicQrSubtitle: string;
+  clinicQrExpiresIn: string;
+  clinicQrExpired: string;
+  clinicQrRefresh: string;
+  clinicQrEnlarge: string;
+  clinicQrReduce: string;
+  clinicQrSecurityNote: string;
+  searchPatientsPlaceholder: string;
+  allStatuses: string;
+  skippedCount: string;
+  adminCompletionRate: string;
 }

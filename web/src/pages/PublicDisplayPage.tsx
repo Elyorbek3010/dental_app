@@ -13,7 +13,7 @@ export const PublicDisplayPage: React.FC = () => {
 
   if (loading && !data) {
     return (
-      <main className="min-h-screen w-screen bg-slate-950 text-white flex flex-col">
+      <main className="min-h-screen w-screen bg-[#071422] text-[#F1F5F9] flex flex-col">
         <DisplayLoadingState />
       </main>
     );
@@ -21,7 +21,7 @@ export const PublicDisplayPage: React.FC = () => {
 
   if (error && !data) {
     return (
-      <main className="min-h-screen w-screen bg-slate-950 text-white flex flex-col">
+      <main className="min-h-screen w-screen bg-[#071422] text-[#F1F5F9] flex flex-col">
         <DisplayErrorState message={error} onRetry={refetch} />
       </main>
     );
@@ -29,7 +29,7 @@ export const PublicDisplayPage: React.FC = () => {
 
   if (!data) {
     return (
-      <main className="min-h-screen w-screen bg-slate-950 text-white flex flex-col">
+      <main className="min-h-screen w-screen bg-[#071422] text-[#F1F5F9] flex flex-col">
         <DisplayErrorState message="Unable to load queue information" onRetry={refetch} />
       </main>
     );
@@ -52,12 +52,12 @@ export const PublicDisplayPage: React.FC = () => {
   };
 
   return (
-    <main className="min-h-screen w-screen bg-slate-950 text-white flex flex-col selection:bg-cyan-500 selection:text-white">
+    <main className="min-h-screen w-screen bg-[#071422] text-[#F1F5F9] flex flex-col selection:bg-[#0D9488] selection:text-white">
       {/* Top Header */}
       <DisplayHeader clinicName={clinic.name} />
 
       {/* Main Content Area */}
-      <section className="flex-1 p-6 md:p-8 flex flex-col justify-start overflow-y-auto">
+      <section className="flex-1 p-6 md:p-8 lg:p-10 flex flex-col justify-start overflow-y-auto">
         {queues.length === 0 ? (
           <DisplayEmptyState />
         ) : (

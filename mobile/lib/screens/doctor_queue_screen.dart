@@ -10,7 +10,10 @@ import '../services/queue_realtime_service.dart';
 import '../services/queue_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/error_localizer.dart';
+import '../widgets/dental_surfaces.dart';
 import '../widgets/empty_state_card.dart';
+import '../widgets/loading_skeleton.dart';
+import '../widgets/status_chip.dart';
 import 'patient_shell.dart';
 
 /// Screen displaying today's queue information for the selected doctor
@@ -132,7 +135,7 @@ class _DoctorQueueScreenState extends State<DoctorQueueScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(l10n.queuePausedSnackbar),
-          backgroundColor: AppTheme.warning,
+          backgroundColor: context.dentalColors.warning,
         ),
       );
       return;
@@ -142,7 +145,7 @@ class _DoctorQueueScreenState extends State<DoctorQueueScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(l10n.queueInactiveSnackbar),
-          backgroundColor: AppTheme.warning,
+          backgroundColor: context.dentalColors.warning,
         ),
       );
       return;
@@ -163,7 +166,7 @@ class _DoctorQueueScreenState extends State<DoctorQueueScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(l10n.ticketJoinedSuccess(ticket.ticketNumber)),
-          backgroundColor: AppTheme.success,
+          backgroundColor: context.dentalColors.success,
         ),
       );
 
@@ -263,6 +266,8 @@ class _DoctorQueueScreenState extends State<DoctorQueueScreen> {
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
+    final colors = context.dentalColors;
+    final queue = _queue;
 
     return Scaffold(
       appBar: AppBar(
@@ -274,14 +279,52 @@ class _DoctorQueueScreenState extends State<DoctorQueueScreen> {
         ),
       ),
       body: _buildBody(l10n),
+      bottomNavigationBar: (!_isLoading &&
+              _errorMessage == null &&
+              queue != null &&
+              queue.isActive)
+          ? SafeArea(
+              top: false,
+              child: Container(
+                padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
+                decoration: BoxDecoration(
+                  color: colors.surface,
+                  border: Border(top: BorderSide(color: colors.border)),
+                ),
+                child: ElevatedButton.icon(
+                  key: const Key('doctor_queue_join_button'),
+                  onPressed: (_isJoining || queue.isPaused)
+                      ? null
+                      : () => _handleJoinQueue(l10n),
+                  icon: _isJoining
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Icon(Icons.add_circle_outline, size: 20),
+                  label: Text(
+                    _isJoining
+                        ? l10n.loadingText
+                        : (queue.isPaused
+                            ? l10n.queueTemporarilyPaused
+                            : l10n.joinQueueButton),
+                  ),
+                ),
+              ),
+            )
+          : null,
     );
   }
 
   Widget _buildBody(AppLocalizations l10n) {
+    final colors = context.dentalColors;
+
     if (_isLoading) {
-      return const Center(
-        child: CircularProgressIndicator(),
-      );
+      return const LoadingSkeleton(itemCount: 3);
     }
 
     if (_errorMessage != null) {
@@ -305,35 +348,23 @@ class _DoctorQueueScreenState extends State<DoctorQueueScreen> {
       onRefresh: _loadQueue,
       child: SingleChildScrollView(
         physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.fromLTRB(20, 18, 20, 32),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // Doctor & Specialization Header Card
+            // Editorial Doctor Profile Strip
             Container(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.all(18),
               decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: AppTheme.cardBorder),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.03),
-                    blurRadius: 10,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
+                color: colors.surface,
+                borderRadius: BorderRadius.circular(22),
+                border: Border.all(color: colors.border),
               ),
               child: Row(
                 children: [
-                  CircleAvatar(
-                    radius: 30,
-                    backgroundColor: AppTheme.primaryLight,
-                    child: const Icon(
-                      Icons.person,
-                      size: 36,
-                      color: AppTheme.primary,
-                    ),
+                  DoctorMonogramBadge(
+                    fullName: widget.doctor.fullName,
+                    size: 56,
                   ),
                   const SizedBox(width: 16),
                   Expanded(
@@ -342,61 +373,77 @@ class _DoctorQueueScreenState extends State<DoctorQueueScreen> {
                       children: [
                         Text(
                           widget.doctor.fullName,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 18,
-                            fontWeight: FontWeight.w700,
-                            color: AppTheme.textPrimary,
+                            fontWeight: FontWeight.w800,
+                            color: colors.textPrimary,
                           ),
                         ),
-                        const SizedBox(height: 4),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 2,
-                          ),
-                          decoration: BoxDecoration(
-                            color: AppTheme.primaryLight,
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: Text(
-                            widget.specialization.name,
-                            style: const TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                              color: AppTheme.primary,
-                            ),
-                          ),
-                        ),
-                        if (widget.doctor.roomNumber != null &&
-                            widget.doctor.roomNumber!.isNotEmpty) ...[
-                          const SizedBox(height: 6),
-                          Row(
-                            children: [
-                              const Icon(
-                                Icons.meeting_room_outlined,
-                                size: 15,
-                                color: AppTheme.textSecondary,
+                        const SizedBox(height: 6),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 6,
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 9,
+                                vertical: 3,
                               ),
-                              const SizedBox(width: 4),
-                              Text(
-                                l10n.roomNumberDoctorFormat(widget.doctor.roomNumber!),
-                                style: const TextStyle(
-                                  fontSize: 13,
-                                  color: AppTheme.textSecondary,
+                              decoration: BoxDecoration(
+                                color: colors.tealSoft,
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Text(
+                                widget.specialization.name,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w700,
+                                  color: colors.teal,
                                 ),
                               ),
-                            ],
-                          ),
-                        ],
+                            ),
+                            if (widget.doctor.roomNumber != null &&
+                                widget.doctor.roomNumber!.isNotEmpty)
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 9,
+                                  vertical: 3,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: colors.surfaceMuted,
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(color: colors.border),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      Icons.meeting_room_outlined,
+                                      size: 14,
+                                      color: colors.textSecondary,
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      l10n.roomNumberDoctorFormat(widget.doctor.roomNumber!),
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w600,
+                                        color: colors.textSecondary,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                          ],
+                        ),
                       ],
                     ),
                   ),
                 ],
               ),
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 18),
 
-            // Queue Availability & Overview Section
             if (queue == null) ...[
               EmptyStateCard(
                 icon: Icons.event_busy_outlined,
@@ -410,214 +457,160 @@ class _DoctorQueueScreenState extends State<DoctorQueueScreen> {
                 description: l10n.queueInactiveSnackbar,
               ),
             ] else ...[
-              // Material 3 Pre-Join Queue Overview Card
-              Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: AppTheme.cardBorder),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.03),
-                      blurRadius: 10,
-                      offset: const Offset(0, 4),
-                    ),
-                  ],
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    // Status Badge Row
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          l10n.todayQueueHeader,
-                          style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w700,
-                            color: AppTheme.textPrimary,
-                          ),
-                        ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 4,
-                          ),
-                          decoration: BoxDecoration(
-                            color: queue.isPaused
-                                ? AppTheme.warning.withValues(alpha: 0.15)
-                                : AppTheme.success.withValues(alpha: 0.15),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                Icons.circle,
-                                size: 8,
-                                color: queue.isPaused
-                                    ? AppTheme.warning
-                                    : AppTheme.success,
-                              ),
-                              const SizedBox(width: 6),
-                              Text(
-                                queue.isPaused
-                                    ? l10n.queueStatusPaused
-                                    : l10n.queueStatusActive,
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.bold,
-                                  color: queue.isPaused
-                                      ? AppTheme.warning
-                                      : AppTheme.success,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      queue.queueDate,
-                      style: const TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w500,
-                        color: AppTheme.textSecondary,
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-
-                    // Live 3-column metrics
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _buildMetricTile(
-                            label: l10n.currentlyServingLabel,
-                            value: '${queue.servingCount}',
-                            valueKey: const Key('prejoin_serving_count'),
-                            color: AppTheme.primary,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: _buildMetricTile(
-                            label: l10n.waitingCountLabel,
-                            value: '${queue.waitingCount}',
-                            valueKey: const Key('prejoin_waiting_count'),
-                            color: AppTheme.textPrimary,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: _buildMetricTile(
-                            label: l10n.calledCountLabel,
-                            value: '${queue.calledCount}',
-                            valueKey: const Key('prejoin_called_count'),
-                            color: AppTheme.warning,
-                          ),
-                        ),
-                      ],
-                    ),
-
-                    const SizedBox(height: 20),
-                    const Divider(height: 1, color: AppTheme.cardBorder),
-                    const SizedBox(height: 16),
-
-                    // "If you join now" Estimated Position Box
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 12,
-                      ),
-                      decoration: BoxDecoration(
-                        color: AppTheme.background,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: AppTheme.cardBorder),
-                      ),
-                      child: Row(
+              // Perforated Ticket-Pass Pre-Join Telemetry Board
+              TicketPassCard(
+                accentColor: queue.isPaused ? colors.warning : colors.teal,
+                topSection: Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 18, 20, 12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                l10n.ifYouJoinNowLabel,
-                                style: const TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w500,
-                                  color: AppTheme.textSecondary,
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  l10n.todayQueueHeader,
+                                  style: TextStyle(
+                                    fontSize: 16.5,
+                                    fontWeight: FontWeight.w800,
+                                    color: colors.textPrimary,
+                                  ),
                                 ),
-                              ),
-                              const SizedBox(height: 2),
-                              Text(
-                                l10n.estimatedPositionLabel,
-                                style: const TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w700,
-                                  color: AppTheme.textPrimary,
+                                const SizedBox(height: 2),
+                                Text(
+                                  queue.queueDate,
+                                  style: TextStyle(
+                                    fontSize: 12.5,
+                                    fontWeight: FontWeight.w500,
+                                    color: colors.textSecondary,
+                                  ),
                                 ),
-                              ),
-                            ],
+                              ],
+                            ),
                           ),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 6,
+                          StatusChip(
+                            status: queue.isPaused ? 'PAUSED' : 'SERVING',
+                            isPaused: queue.isPaused,
+                            label: queue.isPaused
+                                ? l10n.queueStatusPaused
+                                : l10n.queueStatusActive,
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 18),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _buildMetricTile(
+                              colors: colors,
+                              label: l10n.currentlyServingLabel,
+                              value: '${queue.servingCount}',
+                              valueKey: const Key('prejoin_serving_count'),
+                              color: colors.teal,
+                              icon: Icons.medical_services_outlined,
                             ),
-                            decoration: BoxDecoration(
-                              color: AppTheme.primaryLight,
-                              borderRadius: BorderRadius.circular(8),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: _buildMetricTile(
+                              colors: colors,
+                              label: l10n.waitingCountLabel,
+                              value: '${queue.waitingCount}',
+                              valueKey: const Key('prejoin_waiting_count'),
+                              color: colors.blue,
+                              icon: Icons.schedule_rounded,
                             ),
-                            child: Text(
-                              l10n.estimatedPositionValue(
-                                queue.estimatedPositionIfJoined,
-                              ),
-                              key: const Key('prejoin_estimated_position'),
-                              style: const TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w800,
-                                color: AppTheme.primary,
-                              ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: _buildMetricTile(
+                              colors: colors,
+                              label: l10n.calledCountLabel,
+                              value: '${queue.calledCount}',
+                              valueKey: const Key('prejoin_called_count'),
+                              color: colors.warning,
+                              icon: Icons.notifications_active_outlined,
                             ),
                           ),
                         ],
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
-              const SizedBox(height: 24),
-
-              // Join Queue Button
-              ElevatedButton.icon(
-                key: const Key('doctor_queue_join_button'),
-                onPressed: (_isJoining || queue.isPaused)
-                    ? null
-                    : () => _handleJoinQueue(l10n),
-                icon: _isJoining
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Colors.white,
+                bottomSection: Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              l10n.ifYouJoinNowLabel,
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: colors.textSecondary,
+                              ),
+                            ),
+                            const SizedBox(height: 3),
+                            Text(
+                              l10n.estimatedPositionLabel,
+                              style: TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w800,
+                                color: colors.textPrimary,
+                              ),
+                            ),
+                            const SizedBox(height: 3),
+                            Text(
+                              l10n.peopleAhead(
+                                queue.waitingCount +
+                                    queue.calledCount +
+                                    queue.servingCount,
+                              ),
+                              key: const Key('prejoin_people_ahead_text'),
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: colors.blue,
+                              ),
+                            ),
+                          ],
                         ),
-                      )
-                    : const Icon(Icons.add_circle_outline, size: 20),
-                label: Text(
-                  _isJoining
-                      ? l10n.loadingText
-                      : (queue.isPaused
-                          ? l10n.queueTemporarilyPaused
-                          : l10n.joinQueueButton),
-                ),
-                style: ElevatedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
+                      ),
+                      const SizedBox(width: 12),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 9,
+                        ),
+                        decoration: BoxDecoration(
+                          color: colors.tealSoft,
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(
+                            color: colors.teal.withValues(alpha: 0.35),
+                          ),
+                        ),
+                        child: Text(
+                          l10n.estimatedPositionValue(
+                            queue.estimatedPositionIfJoined,
+                          ),
+                          key: const Key('prejoin_estimated_position'),
+                          style: TextStyle(
+                            fontSize: 19,
+                            fontWeight: FontWeight.w900,
+                            color: colors.teal,
+                            fontFeatures: const [FontFeature.tabularFigures()],
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),
@@ -629,27 +622,32 @@ class _DoctorQueueScreenState extends State<DoctorQueueScreen> {
   }
 
   Widget _buildMetricTile({
+    required DentalThemeTokens colors,
     required String label,
     required String value,
     required Key valueKey,
     required Color color,
+    required IconData icon,
   }) {
     return Container(
-      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+      padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
       decoration: BoxDecoration(
-        color: AppTheme.background,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppTheme.cardBorder),
+        color: colors.surfaceMuted,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: colors.border),
       ),
       child: Column(
         children: [
+          Icon(icon, size: 17, color: color),
+          const SizedBox(height: 6),
           Text(
             value,
             key: valueKey,
             style: TextStyle(
               fontSize: 22,
-              fontWeight: FontWeight.w800,
+              fontWeight: FontWeight.w900,
               color: color,
+              fontFeatures: const [FontFeature.tabularFigures()],
             ),
           ),
           const SizedBox(height: 4),
@@ -658,10 +656,10 @@ class _DoctorQueueScreenState extends State<DoctorQueueScreen> {
             textAlign: TextAlign.center,
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 11,
-              fontWeight: FontWeight.w500,
-              color: AppTheme.textSecondary,
+              fontWeight: FontWeight.w600,
+              color: colors.textSecondary,
             ),
           ),
         ],

@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { Activity, Clock } from 'lucide-react';
+import { Clock } from 'lucide-react';
+import { DentalLogo } from '../common/DentalLogo';
 
 interface DisplayHeaderProps {
   clinicName: string;
@@ -29,17 +30,17 @@ export const DisplayHeader: React.FC<DisplayHeaderProps> = ({ clinicName }) => {
   });
 
   return (
-    <header className="w-full bg-slate-900/90 border-b border-slate-800 backdrop-blur-md px-6 py-4 flex flex-col md:flex-row items-center justify-between gap-4 shadow-lg shrink-0">
+    <header className="w-full bg-[#0B1728]/95 border-b border-[#1E354E] backdrop-blur-md px-6 lg:px-10 py-4 flex flex-col md:flex-row items-center justify-between gap-4 shadow-xl shrink-0">
       {/* Clinic Identity */}
       <div className="flex items-center gap-4">
-        <div className="w-12 h-12 rounded-xl bg-gradient-to-tr from-cyan-600 to-blue-500 flex items-center justify-center shadow-md shadow-cyan-900/40 border border-cyan-400/30">
-          <Activity className="w-7 h-7 text-white" />
+        <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#12243A] border border-[#253F5B] shadow-md">
+          <DentalLogo size="md" />
         </div>
         <div>
-          <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight text-white m-0">
+          <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight text-[#F1F5F9] m-0">
             {clinicName}
           </h1>
-          <p className="text-xs md:text-sm text-cyan-400 font-medium tracking-wide uppercase m-0 flex items-center gap-1.5">
+          <p className="text-xs md:text-sm text-[#2DD4BF] font-semibold tracking-wider uppercase m-0 mt-0.5 flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse inline-block" />
             Waiting Room Display
           </p>
@@ -47,13 +48,13 @@ export const DisplayHeader: React.FC<DisplayHeaderProps> = ({ clinicName }) => {
       </div>
 
       {/* Clock and Live Status */}
-      <div className="flex items-center gap-4 bg-slate-800/80 border border-slate-700/60 px-5 py-2.5 rounded-xl shadow-inner">
-        <Clock className="w-5 h-5 text-cyan-400 shrink-0" />
+      <div className="flex items-center gap-3.5 bg-[#12243A] border border-[#253F5B] px-5 py-2.5 rounded-2xl shadow-inner">
+        <Clock className="w-5 h-5 text-[#38BDF8] shrink-0" />
         <div className="text-right">
-          <div className="text-xl md:text-2xl font-bold font-mono text-white tracking-wider">
+          <div className="text-xl md:text-2xl font-extrabold font-mono text-[#F1F5F9] tracking-wider tabular-nums">
             {formattedTime}
           </div>
-          <div className="text-xs text-slate-400 font-medium">
+          <div className="text-xs text-[#A5B4C7] font-medium">
             {formattedDate}
           </div>
         </div>

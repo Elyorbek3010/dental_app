@@ -1329,6 +1329,66 @@ abstract class AppLocalizations {
   /// In uz, this message translates to:
   /// **'Aloqa uzildi. Oxirgi maʼlumotlar ko‘rsatilmoqda, qayta ulanilmoqda...'**
   String get syncConnectionWarning;
+
+  /// No description provided for @themeSectionTitle.
+  ///
+  /// In uz, this message translates to:
+  /// **'Tashqi ko‘rinish'**
+  String get themeSectionTitle;
+
+  /// No description provided for @themeLight.
+  ///
+  /// In uz, this message translates to:
+  /// **'Yorug‘'**
+  String get themeLight;
+
+  /// No description provided for @themeDark.
+  ///
+  /// In uz, this message translates to:
+  /// **'Tungi'**
+  String get themeDark;
+
+  /// No description provided for @themeSystem.
+  ///
+  /// In uz, this message translates to:
+  /// **'Tizim'**
+  String get themeSystem;
+
+  /// No description provided for @quickAccessTitle.
+  ///
+  /// In uz, this message translates to:
+  /// **'Tezkor xizmatlar'**
+  String get quickAccessTitle;
+
+  /// No description provided for @activeVisitStatusTitle.
+  ///
+  /// In uz, this message translates to:
+  /// **'Faol tashrif'**
+  String get activeVisitStatusTitle;
+
+  /// No description provided for @viewLiveQueueLabel.
+  ///
+  /// In uz, this message translates to:
+  /// **'Jonli navbat'**
+  String get viewLiveQueueLabel;
+
+  /// No description provided for @clinicPortalBadge.
+  ///
+  /// In uz, this message translates to:
+  /// **'Stomatologiya klinikasi'**
+  String get clinicPortalBadge;
+
+  /// No description provided for @searchSpecialtiesHint.
+  ///
+  /// In uz, this message translates to:
+  /// **'Mutaxassislikni qidirish...'**
+  String get searchSpecialtiesHint;
+
+  /// No description provided for @chooseCareSubtitle.
+  ///
+  /// In uz, this message translates to:
+  /// **'Shifokorlarni ko‘rish uchun tanlang'**
+  String get chooseCareSubtitle;
 }
 
 class _AppLocalizationsDelegate
