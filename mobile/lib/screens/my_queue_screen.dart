@@ -47,6 +47,7 @@ class _MyQueueScreenState extends State<MyQueueScreen> with WidgetsBindingObserv
   final Object _realtimeConsumer = Object();
   StreamSubscription<Map<String, dynamic>>? _queueEventSubscription;
   StreamSubscription<QueueUpdatedEvent>? _realtimeSubscription;
+  Timer? _countdownTimer;
 
   MyQueueTicket? _ticket;
   bool _isLoading = true;
@@ -173,9 +174,56 @@ class _MyQueueScreenState extends State<MyQueueScreen> with WidgetsBindingObserv
     _realtimeService.connectForConsumer(_realtimeConsumer, clinicId);
   }
 
+  void _syncCountdownTimer() {
+    final ticket = _ticket;
+    final shouldTick = ticket != null &&
+        ticket.isCalled &&
+        !ticket.isQueuePaused &&
+        ticket.pausedRemainingSeconds == null &&
+        ticket.callDeadlineAt != null;
+
+    if (!shouldTick) {
+      _countdownTimer?.cancel();
+      _countdownTimer = null;
+      return;
+    }
+
+    _countdownTimer ??= Timer.periodic(const Duration(seconds: 1), (_) {
+      if (!mounted) return;
+      setState(() {});
+    });
+  }
+
+  int? _remainingCallSeconds(MyQueueTicket ticket) {
+    if (!ticket.isCalled) return null;
+    if (ticket.pausedRemainingSeconds != null) {
+      final paused = ticket.pausedRemainingSeconds!;
+      return paused < 0 ? 0 : paused;
+    }
+    final deadline = ticket.callDeadlineAt;
+    if (deadline == null) return null;
+
+    final offset = (ticket.serverTime != null && ticket.fetchedAt != null)
+        ? ticket.serverTime!.difference(ticket.fetchedAt!)
+        : Duration.zero;
+    final adjustedNow = DateTime.now().toUtc().add(offset);
+    final remainingMs = deadline.toUtc().difference(adjustedNow).inMilliseconds;
+    if (remainingMs <= 0) return 0;
+    return (remainingMs / 1000).ceil();
+  }
+
+  String _formatCountdownMmSs(int totalSeconds) {
+    final safeSeconds = totalSeconds < 0 ? 0 : totalSeconds;
+    final mins = safeSeconds ~/ 60;
+    final secs = safeSeconds % 60;
+    return '${mins.toString().padLeft(2, '0')}:${secs.toString().padLeft(2, '0')}';
+  }
+
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _countdownTimer?.cancel();
+    _countdownTimer = null;
     _queueEventSubscription?.cancel();
     _queueEventSubscription = null;
     _realtimeSubscription?.cancel();
@@ -202,6 +250,7 @@ class _MyQueueScreenState extends State<MyQueueScreen> with WidgetsBindingObserv
           _ticket = ticket;
           _isLoading = false;
         });
+        _syncCountdownTimer();
         if (ticket != null) {
           final clinicId = ticket.clinicId ?? ticket.doctor.clinicId ?? ApiConfig.defaultClinicId;
           if (_realtimeService.activeClinicId != clinicId || !_realtimeService.isConnected) {
@@ -219,6 +268,7 @@ class _MyQueueScreenState extends State<MyQueueScreen> with WidgetsBindingObserv
           }
           _isLoading = false;
         });
+        _syncCountdownTimer();
       }
     } catch (e) {
       if (mounted) {
@@ -574,6 +624,45 @@ class _MyQueueScreenState extends State<MyQueueScreen> with WidgetsBindingObserv
                         color: Colors.white,
                         fontSize: 13,
                         height: 1.3,
+                      ),
+                    ),
+                  ),
+                if (_remainingCallSeconds(ticket) case final int remaining)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 10),
+                    child: Container(
+                      key: const Key('called_countdown_badge'),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 5,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.35),
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(
+                            Icons.timer_outlined,
+                            color: Colors.white,
+                            size: 16,
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            ticket.isQueuePaused
+                                ? '${l10n.remainingTimeLabel}: ${_formatCountdownMmSs(remaining)} (${l10n.pausedCountdownBadge})'
+                                : '${l10n.remainingTimeLabel}: ${_formatCountdownMmSs(remaining)}',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w800,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ),

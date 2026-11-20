@@ -63,6 +63,10 @@ export interface QueueTicket {
   checked_in_at: string | null;
   check_in_method: CheckInMethod | null;
   missed_turns: number;
+  called_at?: string | null;
+  call_deadline_at?: string | null;
+  paused_remaining_seconds?: number | null;
+  server_time?: string | null;
 }
 
 export interface WalkInPatientCreate {

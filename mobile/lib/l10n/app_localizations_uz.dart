@@ -669,4 +669,10 @@ class AppLocalizationsUz extends AppLocalizations {
   @override
   String get fgNotifMissedTurn =>
       'Navbatingiz o‘tkazildi va navbat oxiriga ko‘chirildi.';
+
+  @override
+  String get remainingTimeLabel => 'Qolgan vaqt';
+
+  @override
+  String get pausedCountdownBadge => 'To‘xtatilgan';
 }

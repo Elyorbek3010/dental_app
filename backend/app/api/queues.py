@@ -28,6 +28,14 @@ from app.services.queue_notifications import (
     schedule_skipped_notification,
     trigger_missed_turn_notification,
 )
+from app.services.smart_call_timer import (
+    advance_smart_call_for_queue,
+    clear_ticket_call_countdown,
+    freeze_ticket_call_countdown,
+    get_clinic_timeout_seconds,
+    resume_ticket_call_countdown,
+    start_ticket_call_countdown,
+)
 from app.schemas.queue import (
     CheckInQRResponse,
     MyQueueTicketResponse,
@@ -64,7 +72,7 @@ def get_my_ticket(
     lang: str = Depends(get_language),
 ) -> MyQueueTicketResponse:
     result = db.execute(
-        select(QueueTicket, Doctor, Specialization)
+        select(QueueTicket, Queue, Doctor, Specialization)
         .join(Queue, QueueTicket.queue_id == Queue.id)
         .join(Doctor, Queue.doctor_id == Doctor.id)
         .join(Specialization, Doctor.specialization_id == Specialization.id)
@@ -82,7 +90,7 @@ def get_my_ticket(
     if not result and include_skipped:
         today = date.today()
         result = db.execute(
-            select(QueueTicket, Doctor, Specialization)
+            select(QueueTicket, Queue, Doctor, Specialization)
             .join(Queue, QueueTicket.queue_id == Queue.id)
             .join(Doctor, Queue.doctor_id == Doctor.id)
             .join(Specialization, Doctor.specialization_id == Specialization.id)
@@ -101,7 +109,7 @@ def get_my_ticket(
             detail="No active queue ticket found",
         )
 
-    ticket, doctor, specialization = result
+    ticket, queue, doctor, specialization = result
 
     if ticket.status == TicketStatus.SKIPPED:
         people_ahead = 0
@@ -131,6 +139,11 @@ def get_my_ticket(
         check_in_method=ticket.check_in_method,
         people_ahead=people_ahead,
         clinic_id=doctor.clinic_id,
+        called_at=ticket.called_at,
+        call_deadline_at=ticket.call_deadline_at,
+        paused_remaining_seconds=ticket.paused_remaining_seconds,
+        is_queue_paused=bool(queue.is_paused),
+        server_time=datetime.now(timezone.utc),
         doctor=MyTicketDoctorResponse(
             id=doctor.id,
             full_name=doctor.full_name,
@@ -172,10 +185,18 @@ def cancel_my_ticket(
             detail="No active ticket found to cancel",
         )
 
-    queue = db.scalar(select(Queue).where(Queue.id == ticket.queue_id))
+    queue = db.scalar(select(Queue).where(Queue.id == ticket.queue_id).with_for_update())
+    # Re-fetch ticket under queue lock so concurrent timer/serve transitions are serialized
+    ticket = db.scalar(select(QueueTicket).where(QueueTicket.id == ticket.id))
+    if not ticket or ticket.status not in (TicketStatus.WAITING, TicketStatus.CALLED, TicketStatus.SKIPPED):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Ticket can no longer be cancelled",
+        )
     doctor = db.scalar(select(Doctor).where(Doctor.id == queue.doctor_id)) if queue else None
 
     ticket.status = TicketStatus.CANCELLED
+    clear_ticket_call_countdown(ticket)
     db.commit()
     db.refresh(ticket)
 
@@ -519,7 +540,7 @@ def pause_queue(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_roles(UserRole.RECEPTIONIST, UserRole.ADMIN)),
 ) -> Queue:
-    queue = db.scalar(select(Queue).where(Queue.id == queue_id))
+    queue = db.scalar(select(Queue).where(Queue.id == queue_id).with_for_update())
     if not queue:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -558,6 +579,15 @@ def pause_queue(
         )
 
     queue.is_paused = True
+    pause_now = datetime.now(timezone.utc)
+    called_tickets = db.scalars(
+        select(QueueTicket).where(
+            QueueTicket.queue_id == queue.id,
+            QueueTicket.status == TicketStatus.CALLED,
+        )
+    ).all()
+    for called_ticket in called_tickets:
+        freeze_ticket_call_countdown(called_ticket, now=pause_now)
     db.commit()
     db.refresh(queue)
     notify_display_update(doctor.clinic_id, background_tasks, queue_id=queue.id)
@@ -575,7 +605,7 @@ def resume_queue(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_roles(UserRole.RECEPTIONIST, UserRole.ADMIN)),
 ) -> Queue:
-    queue = db.scalar(select(Queue).where(Queue.id == queue_id))
+    queue = db.scalar(select(Queue).where(Queue.id == queue_id).with_for_update())
     if not queue:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -614,6 +644,16 @@ def resume_queue(
         )
 
     queue.is_paused = False
+    resume_now = datetime.now(timezone.utc)
+    called_tickets = db.scalars(
+        select(QueueTicket).where(
+            QueueTicket.queue_id == queue.id,
+            QueueTicket.status == TicketStatus.CALLED,
+            QueueTicket.paused_remaining_seconds.is_not(None),
+        )
+    ).all()
+    for called_ticket in called_tickets:
+        resume_ticket_call_countdown(called_ticket, now=resume_now)
     db.commit()
     db.refresh(queue)
     notify_display_update(doctor.clinic_id, background_tasks, queue_id=queue.id)
@@ -742,28 +782,15 @@ def call_next_patient(
             detail="No waiting tickets",
         )
 
-    current_max_pos = db.scalar(
-        select(func.coalesce(func.max(QueueTicket.queue_position), 0)).where(
-            QueueTicket.queue_id == queue.id
-        )
-    ) or 0
-
-    called_ticket: QueueTicket | None = None
-    passed_ticket_ids: list[int] = []
-    repositioned_any = False
-
-    for ticket in waiting_tickets:
-        if ticket.checked_in_at is None:
-            current_max_pos += 1
-            ticket.missed_turns += 1
-            ticket.queue_position = current_max_pos
-            repositioned_any = True
-            if ticket.patient_id is not None:
-                passed_ticket_ids.append(ticket.id)
-        else:
-            ticket.status = TicketStatus.CALLED
-            called_ticket = ticket
-            break
+    timeout_seconds = get_clinic_timeout_seconds(db, doctor.clinic_id)
+    advance_result = advance_smart_call_for_queue(
+        db,
+        queue.id,
+        timeout_seconds,
+    )
+    called_ticket = advance_result.called_ticket
+    passed_ticket_ids = advance_result.passed_ticket_ids
+    repositioned_any = advance_result.repositioned_any
 
     if not called_ticket:
         db.commit()
@@ -798,7 +825,7 @@ def call_patient(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_roles(UserRole.RECEPTIONIST, UserRole.ADMIN)),
 ) -> QueueTicket:
-    queue = db.scalar(select(Queue).where(Queue.id == queue_id))
+    queue = db.scalar(select(Queue).where(Queue.id == queue_id).with_for_update())
     if not queue:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -824,6 +851,32 @@ def call_patient(
                 detail="Cannot access another clinic's queue",
             )
 
+    if not queue.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Queue is not active",
+        )
+
+    if queue.is_paused:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Queue is paused",
+        )
+
+    active_ticket = db.scalar(
+        select(QueueTicket)
+        .where(
+            QueueTicket.queue_id == queue.id,
+            QueueTicket.status.in_([TicketStatus.CALLED, TicketStatus.SERVING]),
+        )
+        .limit(1)
+    )
+    if active_ticket:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Queue already has an active patient",
+        )
+
     ticket = db.scalar(
         select(QueueTicket).where(
             QueueTicket.id == ticket_id,
@@ -842,7 +895,8 @@ def call_patient(
             detail="Only waiting tickets can be called",
         )
 
-    ticket.status = TicketStatus.CALLED
+    timeout_seconds = get_clinic_timeout_seconds(db, doctor.clinic_id)
+    start_ticket_call_countdown(ticket, timeout_seconds)
     db.commit()
     db.refresh(ticket)
     notify_display_update(doctor.clinic_id, background_tasks, queue_id=queue.id)
@@ -863,7 +917,7 @@ def serve_patient(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_roles(UserRole.RECEPTIONIST, UserRole.ADMIN)),
 ) -> QueueTicket:
-    queue = db.scalar(select(Queue).where(Queue.id == queue_id))
+    queue = db.scalar(select(Queue).where(Queue.id == queue_id).with_for_update())
     if not queue:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -908,6 +962,7 @@ def serve_patient(
         )
 
     ticket.status = TicketStatus.SERVING
+    clear_ticket_call_countdown(ticket)
     db.commit()
     db.refresh(ticket)
     notify_display_update(doctor.clinic_id, background_tasks, queue_id=queue.id)
@@ -991,7 +1046,7 @@ def skip_patient(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_roles(UserRole.RECEPTIONIST, UserRole.ADMIN)),
 ) -> QueueTicket:
-    queue = db.scalar(select(Queue).where(Queue.id == queue_id))
+    queue = db.scalar(select(Queue).where(Queue.id == queue_id).with_for_update())
     if not queue:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -1036,6 +1091,7 @@ def skip_patient(
         )
 
     ticket.status = TicketStatus.SKIPPED
+    clear_ticket_call_countdown(ticket)
     db.commit()
     db.refresh(ticket)
     notify_display_update(doctor.clinic_id, background_tasks, queue_id=queue.id)
@@ -1132,7 +1188,7 @@ def cancel_patient(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_roles(UserRole.RECEPTIONIST, UserRole.ADMIN, UserRole.PATIENT)),
 ) -> QueueTicket:
-    queue = db.scalar(select(Queue).where(Queue.id == queue_id))
+    queue = db.scalar(select(Queue).where(Queue.id == queue_id).with_for_update())
     if not queue:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -1184,6 +1240,7 @@ def cancel_patient(
         )
 
     ticket.status = TicketStatus.CANCELLED
+    clear_ticket_call_countdown(ticket)
     db.commit()
     db.refresh(ticket)
     notify_display_update(doctor.clinic_id, background_tasks, queue_id=queue.id)

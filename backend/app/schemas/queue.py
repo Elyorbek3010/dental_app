@@ -1,4 +1,4 @@
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -61,6 +61,10 @@ class QueueTicketResponse(BaseModel):
     checked_in_at: datetime | None = None
     check_in_method: CheckInMethod | None = None
     missed_turns: int = 0
+    called_at: datetime | None = None
+    call_deadline_at: datetime | None = None
+    paused_remaining_seconds: int | None = None
+    server_time: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -93,6 +97,11 @@ class MyQueueTicketResponse(BaseModel):
     checked_in_at: datetime | None = None
     check_in_method: CheckInMethod | None = None
     clinic_id: int | None = None
+    called_at: datetime | None = None
+    call_deadline_at: datetime | None = None
+    paused_remaining_seconds: int | None = None
+    is_queue_paused: bool = False
+    server_time: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
     model_config = ConfigDict(from_attributes=True)
 

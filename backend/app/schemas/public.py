@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+
 from pydantic import BaseModel, Field
 
 
@@ -19,6 +21,9 @@ class PublicDisplaySpecialization(BaseModel):
 
 class PublicDisplayTicket(BaseModel):
     ticket_number: int
+    called_at: datetime | None = None
+    call_deadline_at: datetime | None = None
+    paused_remaining_seconds: int | None = None
 
 
 class PublicDisplayQueue(BaseModel):
@@ -32,4 +37,5 @@ class PublicDisplayQueue(BaseModel):
 class PublicDisplayResponse(BaseModel):
     clinic: PublicDisplayClinic
     queues: list[PublicDisplayQueue] = Field(default_factory=list)
+    server_time: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 

@@ -1299,6 +1299,18 @@ abstract class AppLocalizations {
   /// In uz, this message translates to:
   /// **'Navbatingiz o‘tkazildi va navbat oxiriga ko‘chirildi.'**
   String get fgNotifMissedTurn;
+
+  /// No description provided for @remainingTimeLabel.
+  ///
+  /// In uz, this message translates to:
+  /// **'Qolgan vaqt'**
+  String get remainingTimeLabel;
+
+  /// No description provided for @pausedCountdownBadge.
+  ///
+  /// In uz, this message translates to:
+  /// **'To‘xtatilgan'**
+  String get pausedCountdownBadge;
 }
 
 class _AppLocalizationsDelegate

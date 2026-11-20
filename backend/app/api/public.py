@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime, timezone
 import json
 
 from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect, status
@@ -113,6 +113,7 @@ def get_public_clinic_display(
         return PublicDisplayResponse(
             clinic=clinic_dto,
             queues=[],
+            server_time=datetime.now(timezone.utc),
         )
 
     queue_ids = [q.id for q, _d, _s in queue_rows]
@@ -142,7 +143,12 @@ def get_public_clinic_display(
     for t in tickets:
         if t.status == TicketStatus.CALLED:
             if t.queue_id not in called_by_queue:
-                called_by_queue[t.queue_id] = PublicDisplayTicket(ticket_number=t.ticket_number)
+                called_by_queue[t.queue_id] = PublicDisplayTicket(
+                    ticket_number=t.ticket_number,
+                    called_at=t.called_at,
+                    call_deadline_at=t.call_deadline_at,
+                    paused_remaining_seconds=t.paused_remaining_seconds,
+                )
         elif t.status == TicketStatus.WAITING and t.checked_in_at is not None:
             waiting_by_queue[t.queue_id].append(PublicDisplayTicket(ticket_number=t.ticket_number))
 
@@ -168,4 +174,5 @@ def get_public_clinic_display(
     return PublicDisplayResponse(
         clinic=clinic_dto,
         queues=display_queues,
+        server_time=datetime.now(timezone.utc),
     )

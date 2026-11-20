@@ -16,6 +16,9 @@ export interface PublicDisplaySpecialization {
 
 export interface PublicDisplayTicket {
   ticket_number: number;
+  called_at?: string | null;
+  call_deadline_at?: string | null;
+  paused_remaining_seconds?: number | null;
 }
 
 export interface PublicDisplayQueue {
@@ -29,6 +32,7 @@ export interface PublicDisplayQueue {
 export interface PublicDisplayResponse {
   clinic: PublicDisplayClinic;
   queues: PublicDisplayQueue[];
+  server_time?: string | null;
 }
 
 export interface PublicDisplayWsMessage {

@@ -1,6 +1,7 @@
 export interface AdminClinic {
   id: number;
   name: string;
+  smart_call_timeout_seconds: number;
 }
 
 export interface AdminSpecialization {

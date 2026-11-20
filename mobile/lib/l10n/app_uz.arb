@@ -285,5 +285,7 @@
   "fgNotifCalled": "Navbatingiz keldi! Iltimos, qabulga kiring.",
   "fgNotifSkipped": "Taloningiz o‘tkazib yuborildi. Qayta tiklash uchun qabulxonaga murojaat qiling.",
   "fgNotifRestored": "Taloningiz navbatga qayta tiklandi.",
-  "fgNotifMissedTurn": "Navbatingiz o‘tkazildi va navbat oxiriga ko‘chirildi."
+  "fgNotifMissedTurn": "Navbatingiz o‘tkazildi va navbat oxiriga ko‘chirildi.",
+  "remainingTimeLabel": "Qolgan vaqt",
+  "pausedCountdownBadge": "To‘xtatilgan"
 }

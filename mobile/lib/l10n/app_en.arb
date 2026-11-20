@@ -213,5 +213,7 @@
   "fgNotifCalled": "It's your turn! Please proceed to the doctor's room.",
   "fgNotifSkipped": "Your ticket was skipped. Please contact reception to restore it.",
   "fgNotifRestored": "Your ticket has been restored to the queue.",
-  "fgNotifMissedTurn": "You missed your turn and your ticket was moved to the end."
+  "fgNotifMissedTurn": "You missed your turn and your ticket was moved to the end.",
+  "remainingTimeLabel": "Remaining time",
+  "pausedCountdownBadge": "Paused"
 }

@@ -71,6 +71,12 @@ class MyQueueTicket {
   final DateTime? checkedInAt;
   final String? checkInMethod;
   final int? clinicId;
+  final DateTime? calledAt;
+  final DateTime? callDeadlineAt;
+  final int? pausedRemainingSeconds;
+  final bool isQueuePaused;
+  final DateTime? serverTime;
+  final DateTime? fetchedAt;
 
   const MyQueueTicket({
     required this.id,
@@ -85,12 +91,21 @@ class MyQueueTicket {
     this.checkedInAt,
     this.checkInMethod,
     this.clinicId,
+    this.calledAt,
+    this.callDeadlineAt,
+    this.pausedRemainingSeconds,
+    this.isQueuePaused = false,
+    this.serverTime,
+    this.fetchedAt,
   });
 
   factory MyQueueTicket.fromJson(Map<String, dynamic> json) {
     final doctorJson = json['doctor'] as Map<String, dynamic>? ?? {};
     final docClinicId = doctorJson['clinic_id'] as int?;
     final rootClinicId = json['clinic_id'] as int?;
+    final parsedServerTime = json['server_time'] != null
+        ? DateTime.tryParse(json['server_time'].toString())
+        : null;
 
     return MyQueueTicket(
       id: json['id'] as int,
@@ -111,6 +126,16 @@ class MyQueueTicket {
           : null,
       checkInMethod: json['check_in_method'] as String?,
       clinicId: rootClinicId ?? docClinicId,
+      calledAt: json['called_at'] != null
+          ? DateTime.tryParse(json['called_at'].toString())
+          : null,
+      callDeadlineAt: json['call_deadline_at'] != null
+          ? DateTime.tryParse(json['call_deadline_at'].toString())
+          : null,
+      pausedRemainingSeconds: json['paused_remaining_seconds'] as int?,
+      isQueuePaused: json['is_queue_paused'] as bool? ?? false,
+      serverTime: parsedServerTime,
+      fetchedAt: parsedServerTime != null ? DateTime.now().toUtc() : null,
     );
   }
 
@@ -128,6 +153,13 @@ class MyQueueTicket {
           'checked_in_at': checkedInAt!.toIso8601String(),
         if (checkInMethod != null) 'check_in_method': checkInMethod,
         if (clinicId != null) 'clinic_id': clinicId,
+        if (calledAt != null) 'called_at': calledAt!.toIso8601String(),
+        if (callDeadlineAt != null)
+          'call_deadline_at': callDeadlineAt!.toIso8601String(),
+        if (pausedRemainingSeconds != null)
+          'paused_remaining_seconds': pausedRemainingSeconds,
+        'is_queue_paused': isQueuePaused,
+        if (serverTime != null) 'server_time': serverTime!.toIso8601String(),
       };
 
   /// Uzbek presentation label for ticket status (fallback).
@@ -192,6 +224,10 @@ class QueueTicket {
   final DateTime? checkedInAt;
   final String? checkInMethod;
   final int missedTurns;
+  final DateTime? calledAt;
+  final DateTime? callDeadlineAt;
+  final int? pausedRemainingSeconds;
+  final DateTime? serverTime;
 
   const QueueTicket({
     required this.id,
@@ -207,6 +243,10 @@ class QueueTicket {
     this.checkedInAt,
     this.checkInMethod,
     this.missedTurns = 0,
+    this.calledAt,
+    this.callDeadlineAt,
+    this.pausedRemainingSeconds,
+    this.serverTime,
   });
 
   factory QueueTicket.fromJson(Map<String, dynamic> json) {
@@ -228,6 +268,16 @@ class QueueTicket {
           : null,
       checkInMethod: json['check_in_method'] as String?,
       missedTurns: json['missed_turns'] as int? ?? 0,
+      calledAt: json['called_at'] != null
+          ? DateTime.tryParse(json['called_at'].toString())
+          : null,
+      callDeadlineAt: json['call_deadline_at'] != null
+          ? DateTime.tryParse(json['call_deadline_at'].toString())
+          : null,
+      pausedRemainingSeconds: json['paused_remaining_seconds'] as int?,
+      serverTime: json['server_time'] != null
+          ? DateTime.tryParse(json['server_time'].toString())
+          : null,
     );
   }
 
@@ -246,6 +296,12 @@ class QueueTicket {
           'checked_in_at': checkedInAt!.toIso8601String(),
         if (checkInMethod != null) 'check_in_method': checkInMethod,
         'missed_turns': missedTurns,
+        if (calledAt != null) 'called_at': calledAt!.toIso8601String(),
+        if (callDeadlineAt != null)
+          'call_deadline_at': callDeadlineAt!.toIso8601String(),
+        if (pausedRemainingSeconds != null)
+          'paused_remaining_seconds': pausedRemainingSeconds,
+        if (serverTime != null) 'server_time': serverTime!.toIso8601String(),
       };
 
   /// Uzbek presentation label for ticket status (fallback).
