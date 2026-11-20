@@ -689,4 +689,34 @@ class AppLocalizationsRu extends AppLocalizations {
   @override
   String get syncConnectionWarning =>
       'Нет связи с сервером. Показаны последние данные, повторное подключение...';
+
+  @override
+  String get themeSectionTitle => 'Оформление';
+
+  @override
+  String get themeLight => 'Светлая';
+
+  @override
+  String get themeDark => 'Тёмная';
+
+  @override
+  String get themeSystem => 'Системная';
+
+  @override
+  String get quickAccessTitle => 'Быстрые действия';
+
+  @override
+  String get activeVisitStatusTitle => 'Активный визит';
+
+  @override
+  String get viewLiveQueueLabel => 'Живая очередь';
+
+  @override
+  String get clinicPortalBadge => 'Стоматологическая клиника';
+
+  @override
+  String get searchSpecialtiesHint => 'Поиск направления...';
+
+  @override
+  String get chooseCareSubtitle => 'Выберите направление для записи';
 }

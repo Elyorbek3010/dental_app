@@ -1,5 +1,6 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
+import { ThemeProvider } from './context/ThemeContext';
 import { I18nProvider } from './i18n/I18nContext';
 import { ProtectedRoute } from './components/auth/ProtectedRoute';
 import { LoginPage } from './pages/LoginPage';
@@ -18,8 +19,9 @@ import { AdminAnalyticsPage } from './pages/admin/AdminAnalyticsPage';
 
 function App() {
   return (
-    <I18nProvider>
-      <AuthProvider>
+    <ThemeProvider>
+      <I18nProvider>
+        <AuthProvider>
         <BrowserRouter>
           <Routes>
             {/* Public TV display */}
@@ -64,6 +66,7 @@ function App() {
         </BrowserRouter>
       </AuthProvider>
     </I18nProvider>
+    </ThemeProvider>
   );
 }
 

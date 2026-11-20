@@ -4,6 +4,7 @@ import '../l10n/app_localizations.dart';
 import '../services/auth_controller.dart';
 import '../services/reminder_service.dart';
 import '../theme/app_theme.dart';
+import '../widgets/dental_logo.dart';
 import 'login_screen.dart';
 import 'patient_shell.dart';
 
@@ -72,52 +73,47 @@ class _AuthLoadingSplashScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.dentalColors;
+
     return Scaffold(
       body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: AppTheme.primaryLight,
-                shape: BoxShape.circle,
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const DentalLogo(size: 76),
+              const SizedBox(height: 22),
+              Text(
+                'Dental Queue',
+                style: TextStyle(
+                  fontSize: 26,
+                  fontWeight: FontWeight.w800,
+                  color: colors.textPrimary,
+                  letterSpacing: -0.6,
+                ),
               ),
-              child: const Icon(
-                Icons.medical_services_outlined,
-                size: 54,
-                color: AppTheme.primary,
+              const SizedBox(height: 8),
+              Text(
+                AppLocalizations.of(context)?.checkingSession ??
+                    'Xavfsiz sessiya tekshirilmoqda...',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 14,
+                  color: colors.textSecondary,
+                ),
               ),
-            ),
-            const SizedBox(height: 20),
-            const Text(
-              'Dental Queue',
-              style: TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.w800,
-                color: AppTheme.primaryDark,
-                letterSpacing: -0.5,
+              const SizedBox(height: 28),
+              SizedBox(
+                width: 24,
+                height: 24,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2.5,
+                  color: colors.teal,
+                ),
               ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              AppLocalizations.of(context)?.checkingSession ??
-                  'Xavfsiz sessiya tekshirilmoqda...',
-              style: const TextStyle(
-                fontSize: 14,
-                color: AppTheme.textSecondary,
-              ),
-            ),
-            const SizedBox(height: 28),
-            const SizedBox(
-              width: 24,
-              height: 24,
-              child: CircularProgressIndicator(
-                strokeWidth: 2.5,
-                color: AppTheme.primary,
-              ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

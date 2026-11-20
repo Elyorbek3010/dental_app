@@ -8,6 +8,7 @@ import 'services/auth_controller.dart';
 import 'services/local_notification_service.dart';
 import 'services/locale_controller.dart';
 import 'services/push_notification_service.dart';
+import 'services/theme_controller.dart';
 import 'theme/app_theme.dart';
 
 Future<void> main() async {
@@ -22,8 +23,9 @@ Future<void> main() async {
   // Initialize local notifications (personal reminders)
   await LocalNotificationService.instance.initialize();
 
-  // Initialize locale preferences
+  // Initialize locale and theme preferences before first frame
   await LocaleController.instance.initialize();
+  await ThemeController.instance.initialize();
 
   runApp(const MyApp());
 }
@@ -34,12 +36,14 @@ class MyApp extends StatefulWidget {
     this.home,
     this.authController,
     this.localeController,
+    this.themeController,
   });
 
   /// Optional custom home widget for widget testing.
   final Widget? home;
   final AuthController? authController;
   final LocaleController? localeController;
+  final ThemeController? themeController;
 
   @override
   State<MyApp> createState() => _MyAppState();
@@ -79,22 +83,28 @@ class _MyAppState extends State<MyApp> {
 
   @override
   Widget build(BuildContext context) {
-    final controller = widget.localeController ?? LocaleController.instance;
+    final localeController = widget.localeController ?? LocaleController.instance;
+    final themeController = widget.themeController ?? ThemeController.instance;
 
     return ListenableBuilder(
-      listenable: controller,
-      builder: (context, _) {
+      listenable: Listenable.merge([localeController, themeController]),
+      child: widget.home ??
+          AuthGate(
+            authController: _authController,
+          ),
+      builder: (context, homeChild) {
         return MaterialApp(
           title: 'Dental Queue',
           debugShowCheckedModeBanner: false,
           theme: AppTheme.lightTheme,
-          locale: controller.locale,
+          darkTheme: AppTheme.darkTheme,
+          themeMode: themeController.themeMode,
+          // Switch Light <-> Dark atomically in one frame to avoid 200ms ThemeData.lerp grey flicker & subtree rebuild storms
+          themeAnimationStyle: AnimationStyle.noAnimation,
+          locale: localeController.locale,
           localizationsDelegates: AppLocalizations.localizationsDelegates,
           supportedLocales: AppLocalizations.supportedLocales,
-          home: widget.home ??
-              AuthGate(
-                authController: _authController,
-              ),
+          home: homeChild,
         );
       },
     );

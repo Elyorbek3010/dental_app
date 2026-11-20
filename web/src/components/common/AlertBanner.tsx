@@ -24,16 +24,16 @@ export const AlertBanner: React.FC<AlertBannerProps> = ({ type, message, onClose
       icon: <CheckCircle className="h-5 w-5 text-emerald-500 shrink-0 mt-0.5" />,
     },
     info: {
-      bg: 'bg-blue-50 dark:bg-blue-950/40',
-      border: 'border-blue-200 dark:border-blue-900',
-      text: 'text-blue-800 dark:text-blue-200',
-      icon: <Info className="h-5 w-5 text-blue-500 shrink-0 mt-0.5" />,
+      bg: 'bg-[#E0F2FE] dark:bg-[#10324F]/60',
+      border: 'border-[#0284C7]/25 dark:border-[#38BDF8]/30',
+      text: 'text-[#0369A1] dark:text-[#BAE6FD]',
+      icon: <Info className="h-5 w-5 text-[#0284C7] dark:text-[#38BDF8] shrink-0 mt-0.5" />,
     },
   }[type];
 
   return (
     <div
-      className={`flex items-start justify-between gap-3 rounded-xl border p-4 text-sm ${styles.bg} ${styles.border} ${styles.text} shadow-xs animate-fadeIn`}
+      className={`flex items-start justify-between gap-3 rounded-xl border p-4 text-sm ${styles.bg} ${styles.border} ${styles.text} shadow-2xs animate-dental-in`}
     >
       <div className="flex items-start gap-3">
         {styles.icon}

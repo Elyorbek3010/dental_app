@@ -3,6 +3,9 @@ import 'package:flutter/material.dart';
 import '../l10n/l10n.dart';
 import '../models/reminder.dart';
 import '../services/reminder_service.dart';
+import '../theme/app_theme.dart';
+import '../widgets/empty_state_card.dart';
+import '../widgets/loading_skeleton.dart';
 
 /// Screen allowing the patient to view, add, edit, and delete their personal reminders.
 class RemindersScreen extends StatefulWidget {
@@ -76,11 +79,14 @@ class _RemindersScreenState extends State<RemindersScreen> {
     final noteController = TextEditingController(text: existing?.note ?? '');
     String? errorMessage;
 
+    final colors = context.dentalColors;
+
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
+      backgroundColor: colors.surface,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
       builder: (sheetContext) {
         return StatefulBuilder(
@@ -90,7 +96,7 @@ class _RemindersScreenState extends State<RemindersScreen> {
                 left: 20,
                 right: 20,
                 top: 20,
-                bottom: MediaQuery.of(sheetContext).viewInsets.bottom + 20,
+                bottom: MediaQuery.of(sheetContext).viewInsets.bottom + 24,
               ),
               child: SingleChildScrollView(
                 child: Column(
@@ -104,12 +110,14 @@ class _RemindersScreenState extends State<RemindersScreen> {
                           isEditing
                               ? l10n.editReminderModalTitle
                               : l10n.addReminderModalTitle,
-                          style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                                fontWeight: FontWeight.bold,
-                              ),
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w800,
+                            color: colors.textPrimary,
+                          ),
                         ),
                         IconButton(
-                          icon: const Icon(Icons.close),
+                          icon: Icon(Icons.close, color: colors.textSecondary),
                           onPressed: () => Navigator.pop(sheetContext),
                         ),
                       ],
@@ -119,16 +127,25 @@ class _RemindersScreenState extends State<RemindersScreen> {
                     // Date Picker Tile
                     ListTile(
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        side: BorderSide(color: Colors.grey.shade300),
+                        borderRadius: BorderRadius.circular(14),
+                        side: BorderSide(color: colors.border),
                       ),
-                      leading: const Icon(Icons.calendar_today, color: Colors.blueAccent),
-                      title: Text(l10n.reminderDateLabel),
+                      tileColor: colors.surfaceMuted,
+                      leading: Icon(Icons.calendar_today_rounded, color: colors.teal),
+                      title: Text(
+                        l10n.reminderDateLabel,
+                        style: TextStyle(color: colors.textSecondary, fontSize: 13),
+                      ),
                       subtitle: Text(
                         _formatDate(selectedDate),
-                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                        style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 16,
+                          color: colors.textPrimary,
+                          fontFeatures: const [FontFeature.tabularFigures()],
+                        ),
                       ),
-                      trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+                      trailing: Icon(Icons.arrow_forward_ios_rounded, size: 16, color: colors.textMuted),
                       onTap: () async {
                         final now = DateTime.now();
                         final picked = await showDatePicker(
@@ -150,16 +167,25 @@ class _RemindersScreenState extends State<RemindersScreen> {
                     // Time Picker Tile
                     ListTile(
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        side: BorderSide(color: Colors.grey.shade300),
+                        borderRadius: BorderRadius.circular(14),
+                        side: BorderSide(color: colors.border),
                       ),
-                      leading: const Icon(Icons.access_time, color: Colors.blueAccent),
-                      title: Text(l10n.reminderTimeLabel),
+                      tileColor: colors.surfaceMuted,
+                      leading: Icon(Icons.access_time_rounded, color: colors.blue),
+                      title: Text(
+                        l10n.reminderTimeLabel,
+                        style: TextStyle(color: colors.textSecondary, fontSize: 13),
+                      ),
                       subtitle: Text(
                         '${selectedTime.hour.toString().padLeft(2, '0')}:${selectedTime.minute.toString().padLeft(2, '0')}',
-                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                        style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 16,
+                          color: colors.textPrimary,
+                          fontFeatures: const [FontFeature.tabularFigures()],
+                        ),
                       ),
-                      trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+                      trailing: Icon(Icons.arrow_forward_ios_rounded, size: 16, color: colors.textMuted),
                       onTap: () async {
                         final picked = await showTimePicker(
                           context: sheetContext,
@@ -182,9 +208,6 @@ class _RemindersScreenState extends State<RemindersScreen> {
                       decoration: InputDecoration(
                         labelText: l10n.reminderNoteLabel,
                         hintText: l10n.reminderNoteHint,
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
                         prefixIcon: const Icon(Icons.note_alt_outlined),
                       ),
                     ),
@@ -193,7 +216,7 @@ class _RemindersScreenState extends State<RemindersScreen> {
                       const SizedBox(height: 8),
                       Text(
                         errorMessage!,
-                        style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
+                        style: TextStyle(color: colors.error, fontWeight: FontWeight.w700),
                       ),
                     ],
 
@@ -314,162 +337,155 @@ class _RemindersScreenState extends State<RemindersScreen> {
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
+    final colors = context.dentalColors;
 
     return Scaffold(
       appBar: AppBar(
         title: Text(l10n.remindersTitle),
         actions: [
           IconButton(
-            icon: const Icon(Icons.add_alarm),
+            icon: const Icon(Icons.add_alarm_rounded),
             tooltip: l10n.newReminderTooltip,
             onPressed: () => _showReminderForm(),
           ),
         ],
       ),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
+          ? const LoadingSkeleton(itemCount: 3)
           : _reminders.isEmpty
               ? _buildEmptyState(l10n)
               : RefreshIndicator(
                   onRefresh: _loadReminders,
                   child: ListView.builder(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                     itemCount: _reminders.length,
                     itemBuilder: (context, index) {
                       final item = _reminders[index];
-                      return _buildReminderCard(item, l10n);
+                      return _buildReminderCard(item, l10n, colors);
                     },
                   ),
                 ),
       floatingActionButton: FloatingActionButton.extended(
+        backgroundColor: colors.teal,
+        foregroundColor: Colors.white,
         onPressed: () => _showReminderForm(),
-        icon: const Icon(Icons.add),
+        icon: const Icon(Icons.add_rounded),
         label: Text(l10n.addReminderButton),
       ),
     );
   }
 
   Widget _buildEmptyState(AppLocalizations l10n) {
-    return Center(
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.notifications_active_outlined,
-              size: 80,
-              color: Colors.blueAccent.withValues(alpha: 0.7),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              l10n.noRemindersTitle,
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              l10n.noRemindersDesc,
-              textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.grey.shade600, height: 1.4),
-            ),
-            const SizedBox(height: 24),
-            ElevatedButton.icon(
-              onPressed: () => _showReminderForm(),
-              icon: const Icon(Icons.add),
-              label: Text(l10n.addReminderButton),
-              style: ElevatedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-              ),
-            ),
-          ],
+    return Padding(
+      padding: const EdgeInsets.all(20),
+      child: Center(
+        child: EmptyStateCard(
+          icon: Icons.notifications_active_outlined,
+          title: l10n.noRemindersTitle,
+          description: l10n.noRemindersDesc,
+          buttonText: l10n.addReminderButton,
+          onButtonPressed: () => _showReminderForm(),
         ),
       ),
     );
   }
 
-  Widget _buildReminderCard(Reminder reminder, AppLocalizations l10n) {
+  Widget _buildReminderCard(
+    Reminder reminder,
+    AppLocalizations l10n,
+    DentalThemeTokens colors,
+  ) {
     final isPast = reminder.isPast;
     final dateStr = _formatDate(reminder.scheduledAt);
     final timeStr = _formatTime(reminder.scheduledAt);
     final noteStr = reminder.note ?? l10n.defaultReminderNotificationBody;
 
-    return Card(
+    return Container(
       margin: const EdgeInsets.only(bottom: 12),
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Row(
-                  children: [
-                    Icon(
-                      Icons.alarm,
-                      color: isPast ? Colors.grey : Colors.blueAccent,
-                      size: 20,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: colors.surface,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: colors.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: isPast ? colors.surfaceMuted : colors.blueSoft,
+                      borderRadius: BorderRadius.circular(10),
                     ),
-                    const SizedBox(width: 8),
-                    Text(
-                      '$dateStr • $timeStr',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 16,
-                        color: isPast ? Colors.grey : null,
-                      ),
+                    child: Icon(
+                      Icons.alarm_rounded,
+                      color: isPast ? colors.textMuted : colors.blue,
+                      size: 18,
                     ),
-                  ],
-                ),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: isPast ? Colors.grey.shade200 : Colors.blue.shade50,
-                    borderRadius: BorderRadius.circular(8),
                   ),
-                  child: Text(
-                    isPast ? l10n.reminderPastBadge : l10n.reminderWaitingBadge,
+                  const SizedBox(width: 10),
+                  Text(
+                    '$dateStr • $timeStr',
                     style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                      color: isPast ? Colors.grey.shade700 : Colors.blue.shade700,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 15,
+                      color: isPast ? colors.textSecondary : colors.textPrimary,
+                      fontFeatures: const [FontFeature.tabularFigures()],
                     ),
                   ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Text(
-              noteStr,
-              style: TextStyle(
-                fontSize: 14,
-                color: isPast ? Colors.grey.shade600 : Colors.black87,
+                ],
               ),
-            ),
-            const Divider(height: 20),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                TextButton.icon(
-                  onPressed: () => _showReminderForm(existing: reminder),
-                  icon: const Icon(Icons.edit_outlined, size: 18),
-                  label: Text(l10n.editButton),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: isPast ? colors.surfaceMuted : colors.tealSoft,
+                  borderRadius: BorderRadius.circular(999),
                 ),
-                const SizedBox(width: 8),
-                TextButton.icon(
-                  onPressed: () => _deleteReminder(reminder),
-                  icon: const Icon(Icons.delete_outline, size: 18),
-                  label: Text(l10n.deleteButton),
-                  style: TextButton.styleFrom(foregroundColor: Colors.red),
+                child: Text(
+                  isPast ? l10n.reminderPastBadge : l10n.reminderWaitingBadge,
+                  style: TextStyle(
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w700,
+                    color: isPast ? colors.textSecondary : colors.teal,
+                  ),
                 ),
-              ],
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Text(
+            noteStr,
+            style: TextStyle(
+              fontSize: 14,
+              height: 1.4,
+              color: isPast ? colors.textSecondary : colors.textPrimary,
             ),
-          ],
-        ),
+          ),
+          Divider(height: 22, color: colors.border),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              TextButton.icon(
+                onPressed: () => _showReminderForm(existing: reminder),
+                icon: const Icon(Icons.edit_outlined, size: 18),
+                label: Text(l10n.editButton),
+                style: TextButton.styleFrom(foregroundColor: colors.teal),
+              ),
+              const SizedBox(width: 8),
+              TextButton.icon(
+                onPressed: () => _deleteReminder(reminder),
+                icon: const Icon(Icons.delete_outline, size: 18),
+                label: Text(l10n.deleteButton),
+                style: TextButton.styleFrom(foregroundColor: colors.error),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }

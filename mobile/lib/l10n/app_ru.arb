@@ -218,5 +218,15 @@
   "pausedCountdownBadge": "Пауза",
   "alreadyJoinedSpecializationError": "У вас уже есть активный талон по данной специализации.",
   "queuePausedBadge": "Очередь приостановлена",
-  "syncConnectionWarning": "Нет связи с сервером. Показаны последние данные, повторное подключение..."
+  "syncConnectionWarning": "Нет связи с сервером. Показаны последние данные, повторное подключение...",
+  "themeSectionTitle": "Оформление",
+  "themeLight": "Светлая",
+  "themeDark": "Тёмная",
+  "themeSystem": "Системная",
+  "quickAccessTitle": "Быстрые действия",
+  "activeVisitStatusTitle": "Активный визит",
+  "viewLiveQueueLabel": "Живая очередь",
+  "clinicPortalBadge": "Стоматологическая клиника",
+  "searchSpecialtiesHint": "Поиск направления...",
+  "chooseCareSubtitle": "Выберите направление для записи"
 }

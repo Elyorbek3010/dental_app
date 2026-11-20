@@ -1,4 +1,37 @@
 @import "tailwindcss";
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  color-scheme: light;
+  --dental-bg: #f5fafb;
+  --dental-surface: #ffffff;
+  --dental-surface-elevated: #ffffff;
+  --dental-surface-muted: #edf6f8;
+  --dental-border: #dce9ee;
+  --dental-text: #14283f;
+  --dental-text-secondary: #64748b;
+  --dental-teal: #0d9488;
+  --dental-teal-dark: #0f766e;
+  --dental-mint: #ddf7f0;
+  --dental-blue: #0284c7;
+  --dental-blue-soft: #e0f2fe;
+}
+
+.dark {
+  color-scheme: dark;
+  --dental-bg: #0b1728;
+  --dental-surface: #12243a;
+  --dental-surface-elevated: #1a3047;
+  --dental-surface-muted: #162b42;
+  --dental-border: #253f5b;
+  --dental-text: #f1f5f9;
+  --dental-text-secondary: #a5b4c7;
+  --dental-teal: #2dd4bf;
+  --dental-teal-dark: #14b8a6;
+  --dental-mint: #12353d;
+  --dental-blue: #38bdf8;
+  --dental-blue-soft: #10324f;
+}
 
 @layer base {
   html,
@@ -7,6 +40,63 @@
     height: 100%;
     margin: 0;
     padding: 0;
-    font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    background-color: var(--dental-bg);
+    color: var(--dental-text);
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+      'Helvetica Neue', Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  input:-webkit-autofill,
+  input:-webkit-autofill:hover,
+  input:-webkit-autofill:focus,
+  select:-webkit-autofill,
+  textarea:-webkit-autofill {
+    -webkit-text-fill-color: var(--dental-text);
+    box-shadow: 0 0 0 1000px var(--dental-surface-elevated) inset;
+    transition: background-color 5000s ease-in-out 0s;
+  }
+}
+
+@keyframes dentalFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes dentalCallHighlight {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(45, 212, 191, 0.28);
+  }
+  50% {
+    box-shadow: 0 0 0 8px rgba(45, 212, 191, 0);
+  }
+}
+
+.animate-dental-in {
+  animation: dentalFadeIn 180ms ease-out;
+}
+
+.animate-call-glow {
+  animation: dentalCallHighlight 2.2s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-dental-in,
+  .animate-call-glow,
+  .animate-pulse,
+  .animate-ping {
+    animation: none !important;
+  }
+  * {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
   }
 }

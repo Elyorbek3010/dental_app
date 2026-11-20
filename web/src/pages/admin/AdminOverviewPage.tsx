@@ -1,21 +1,28 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Activity,
-  ArrowRight,
   CheckCircle2,
+  ClipboardList,
   Clock,
   Radio,
+  SkipForward,
   Stethoscope,
   TrendingUp,
-  UserCheck,
   UserCog,
   Users,
 } from 'lucide-react';
-import { Link } from 'react-router-dom';
 import { getAdminAnalyticsApi } from '../../api/admin';
 import type { AdminAnalyticsOverview } from '../../types/admin';
 import { useI18n } from '../../i18n/useI18n';
+import { formatShareText } from '../../utils/adminStats';
+import { CompletionProgressCard } from '../../components/admin/CompletionProgressCard';
+import { DoctorQueuesSection } from '../../components/admin/DoctorQueuesSection';
 import { AlertBanner } from '../../components/common/AlertBanner';
+import { AppButton } from '../../components/common/AppButton';
+import { EmptyState } from '../../components/common/EmptyState';
+import { LoadingSkeleton } from '../../components/common/LoadingSkeleton';
+import { PageHeader } from '../../components/common/PageHeader';
+import { StatCard } from '../../components/common/StatCard';
 
 export const AdminOverviewPage: React.FC = () => {
   const { t } = useI18n();
@@ -25,36 +32,34 @@ export const AdminOverviewPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const isMountedRef = useRef(true);
   const latestRequestIdRef = useRef(0);
+  const errorGenericRef = useRef(t.errorGeneric);
 
-  const fetchAnalytics = useCallback(
-    async (isSilent = false) => {
-      const requestId = ++latestRequestIdRef.current;
+  useEffect(() => {
+    errorGenericRef.current = t.errorGeneric;
+  }, [t.errorGeneric]);
+
+  const fetchAnalytics = useCallback(async (isSilent = false) => {
+    const requestId = ++latestRequestIdRef.current;
+    if (!isSilent) {
+      setIsLoading(true);
+      setError(null);
+    }
+    try {
+      const data = await getAdminAnalyticsApi();
+      if (!isMountedRef.current || requestId !== latestRequestIdRef.current) return;
+      setAnalytics(data);
+      setError(null);
+    } catch (err: unknown) {
+      if (!isMountedRef.current || requestId !== latestRequestIdRef.current) return;
       if (!isSilent) {
-        setIsLoading(true);
-        setError(null);
+        setError(err instanceof Error ? err.message : errorGenericRef.current);
       }
-      try {
-        const data = await getAdminAnalyticsApi();
-        if (!isMountedRef.current || requestId !== latestRequestIdRef.current) return;
-        setAnalytics(data);
-        setError(null);
-      } catch (err: unknown) {
-        if (!isMountedRef.current || requestId !== latestRequestIdRef.current) return;
-        if (!isSilent) {
-          if (err instanceof Error) {
-            setError(err.message);
-          } else {
-            setError(t.errorGeneric);
-          }
-        }
-      } finally {
-        if (isMountedRef.current && requestId === latestRequestIdRef.current && !isSilent) {
-          setIsLoading(false);
-        }
+    } finally {
+      if (isMountedRef.current && requestId === latestRequestIdRef.current && !isSilent) {
+        setIsLoading(false);
       }
-    },
-    [t.errorGeneric]
-  );
+    }
+  }, []);
 
   useEffect(() => {
     isMountedRef.current = true;
@@ -69,7 +74,7 @@ export const AdminOverviewPage: React.FC = () => {
       })
       .catch((err: unknown) => {
         if (!isMountedRef.current || requestId !== latestRequestIdRef.current) return;
-        setError(err instanceof Error ? err.message : t.errorGeneric);
+        setError(err instanceof Error ? err.message : errorGenericRef.current);
         setIsLoading(false);
       });
 
@@ -82,293 +87,156 @@ export const AdminOverviewPage: React.FC = () => {
       isMountedRef.current = false;
       window.removeEventListener('admin:refresh', handleAdminRefresh);
     };
-  }, [fetchAnalytics, t.errorGeneric]);
+  }, [fetchAnalytics]);
+
+  const totalTickets = analytics?.today_tickets_total ?? 0;
+  const skippedAndCancelled =
+    (analytics?.today_tickets_skipped ?? 0) + (analytics?.today_tickets_cancelled ?? 0);
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto">
-      {/* Page Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h2 className="text-xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100 flex items-center gap-2.5">
-            <TrendingUp className="h-6 w-6 text-purple-600 dark:text-purple-400" />
-            {t.adminOverviewTitle}
-          </h2>
-          <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
-            {t.adminOverviewSubtitle}
-          </p>
-        </div>
-
-        <button
-          type="button"
-          onClick={() => fetchAnalytics(false)}
-          className="inline-flex items-center gap-2 rounded-xl border border-zinc-200 bg-white px-3.5 py-2 text-xs font-semibold text-zinc-700 shadow-2xs hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
-        >
-          <Activity className="h-3.5 w-3.5 text-purple-600 dark:text-purple-400" />
-          {t.refresh}
-        </button>
-      </div>
+    <div className="space-y-3.5 lg:space-y-0 lg:h-[calc(100vh-6.5rem)] lg:flex lg:flex-col lg:gap-3.5 max-w-7xl mx-auto animate-dental-in">
+      <PageHeader
+        title={t.adminOverviewTitle}
+        subtitle={t.adminOverviewSubtitle}
+        icon={<TrendingUp className="h-5 w-5" />}
+        actions={
+          <AppButton
+            variant="secondary"
+            size="sm"
+            onClick={() => fetchAnalytics(false)}
+            icon={<Activity className="h-3.5 w-3.5 text-[#0D9488] dark:text-[#2DD4BF]" />}
+          >
+            {t.refresh}
+          </AppButton>
+        }
+      />
 
       {error && <AlertBanner type="error" message={error} onClose={() => setError(null)} />}
 
       {isLoading ? (
-        <div className="p-16 text-center text-xs text-zinc-500 dark:text-zinc-400">
-          <div className="mx-auto h-8 w-8 animate-spin rounded-full border-2 border-purple-600 border-t-transparent mb-3" />
-          {t.loading}
-        </div>
+        <LoadingSkeleton cards={4} rows={5} />
       ) : !analytics ? (
-        <div className="p-12 text-center text-xs text-zinc-500 dark:text-zinc-400">
-          {t.noData}
-        </div>
+        <EmptyState title={t.noData} />
       ) : (
         <>
-          {/* Top Operational Metrics */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            {/* Active Doctors */}
-            <div className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-2xs dark:border-zinc-800 dark:bg-zinc-900">
-              <div className="flex items-center justify-between">
-                <p className="text-xs font-semibold text-zinc-500 dark:text-zinc-400">
+          {/* Primary Tinted KPI Summary Cards */}
+          <div className="shrink-0 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            <StatCard
+              variant="tinted"
+              label={t.adminKpiTotalTickets}
+              subLabel={t.todayShortLabel}
+              value={totalTickets}
+              icon={<ClipboardList className="h-5 w-5" />}
+              tone="teal"
+            />
+            <StatCard
+              variant="tinted"
+              label={t.adminKpiWaiting}
+              subLabel={t.adminActiveInQueueLabel}
+              value={analytics.today_tickets_waiting}
+              helperText={formatShareText(
+                analytics.today_tickets_waiting,
+                totalTickets,
+                t.adminShareSummaryTemplate,
+                t.adminNoTicketsIssuedToday
+              )}
+              icon={<Clock className="h-5 w-5" />}
+              tone="amber"
+            />
+            <StatCard
+              variant="tinted"
+              label={t.adminKpiCompleted}
+              subLabel={t.todayShortLabel}
+              value={analytics.today_tickets_completed}
+              helperText={formatShareText(
+                analytics.today_tickets_completed,
+                totalTickets,
+                t.adminShareSummaryTemplate,
+                t.adminNoTicketsIssuedToday
+              )}
+              icon={<CheckCircle2 className="h-5 w-5" />}
+              tone="emerald"
+            />
+            <StatCard
+              variant="tinted"
+              label={t.adminSkippedCancelledLabel}
+              subLabel={t.todayShortLabel}
+              value={skippedAndCancelled}
+              helperText={formatShareText(
+                skippedAndCancelled,
+                totalTickets,
+                t.adminShareSummaryTemplate,
+                t.adminNoTicketsIssuedToday
+              )}
+              icon={<SkipForward className="h-5 w-5" />}
+              tone="rose"
+            />
+          </div>
+
+          {/* Today's Completion Progress */}
+          <CompletionProgressCard
+            totalTickets={analytics.today_tickets_total}
+            completedTickets={analytics.today_tickets_completed}
+            waitingTickets={analytics.today_tickets_waiting}
+            calledTickets={analytics.today_tickets_called}
+            servingTickets={analytics.today_tickets_serving}
+            skippedTickets={analytics.today_tickets_skipped}
+            cancelledTickets={analytics.today_tickets_cancelled}
+          />
+
+          {/* Compact Clinic Staffing & Open Queues Strip */}
+          <div className="shrink-0 grid grid-cols-2 lg:grid-cols-4 gap-2.5">
+            <div className="flex items-center gap-3 rounded-xl border border-[#DCE9EE] bg-white px-4 py-2.5 shadow-2xs dark:border-[#253F5B] dark:bg-[#12243A]">
+              <Users className="h-4 w-4 text-[#0D9488] dark:text-[#2DD4BF] shrink-0" />
+              <div className="min-w-0 flex-1 flex items-baseline justify-between gap-2">
+                <span className="text-xs font-medium text-[#64748B] dark:text-[#A5B4C7] truncate">
                   {t.adminKpiActiveDoctors}
-                </p>
-                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-purple-50 text-purple-600 dark:bg-purple-950/60 dark:text-purple-300">
-                  <Users className="h-5 w-5" />
-                </div>
-              </div>
-              <div className="mt-3 flex items-baseline gap-2">
-                <span className="text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100">
-                  {analytics.active_doctors_count}
                 </span>
-                <span className="text-xs font-medium text-zinc-400">
-                  / {analytics.total_doctors_count}
+                <span className="text-sm font-bold tabular-nums text-[#14283F] dark:text-[#F1F5F9]">
+                  {analytics.active_doctors_count}/{analytics.total_doctors_count}
                 </span>
               </div>
             </div>
 
-            {/* Active Specializations */}
-            <div className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-2xs dark:border-zinc-800 dark:bg-zinc-900">
-              <div className="flex items-center justify-between">
-                <p className="text-xs font-semibold text-zinc-500 dark:text-zinc-400">
+            <div className="flex items-center gap-3 rounded-xl border border-[#DCE9EE] bg-white px-4 py-2.5 shadow-2xs dark:border-[#253F5B] dark:bg-[#12243A]">
+              <Stethoscope className="h-4 w-4 text-[#0284C7] dark:text-[#38BDF8] shrink-0" />
+              <div className="min-w-0 flex-1 flex items-baseline justify-between gap-2">
+                <span className="text-xs font-medium text-[#64748B] dark:text-[#A5B4C7] truncate">
                   {t.adminKpiActiveSpecializations}
-                </p>
-                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600 dark:bg-indigo-950/60 dark:text-indigo-300">
-                  <Stethoscope className="h-5 w-5" />
-                </div>
-              </div>
-              <div className="mt-3">
-                <span className="text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100">
+                </span>
+                <span className="text-sm font-bold tabular-nums text-[#14283F] dark:text-[#F1F5F9]">
                   {analytics.active_specializations_count}
                 </span>
               </div>
             </div>
 
-            {/* Active Receptionists */}
-            <div className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-2xs dark:border-zinc-800 dark:bg-zinc-900">
-              <div className="flex items-center justify-between">
-                <p className="text-xs font-semibold text-zinc-500 dark:text-zinc-400">
+            <div className="flex items-center gap-3 rounded-xl border border-[#DCE9EE] bg-white px-4 py-2.5 shadow-2xs dark:border-[#253F5B] dark:bg-[#12243A]">
+              <UserCog className="h-4 w-4 text-[#0D9488] dark:text-[#2DD4BF] shrink-0" />
+              <div className="min-w-0 flex-1 flex items-baseline justify-between gap-2">
+                <span className="text-xs font-medium text-[#64748B] dark:text-[#A5B4C7] truncate">
                   {t.adminKpiActiveReceptionists}
-                </p>
-                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-sky-50 text-sky-600 dark:bg-sky-950/60 dark:text-sky-300">
-                  <UserCog className="h-5 w-5" />
-                </div>
-              </div>
-              <div className="mt-3">
-                <span className="text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100">
+                </span>
+                <span className="text-sm font-bold tabular-nums text-[#14283F] dark:text-[#F1F5F9]">
                   {analytics.active_receptionists_count}
                 </span>
               </div>
             </div>
 
-            {/* Today Opened Queues */}
-            <div className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-2xs dark:border-zinc-800 dark:bg-zinc-900">
-              <div className="flex items-center justify-between">
-                <p className="text-xs font-semibold text-zinc-500 dark:text-zinc-400">
+            <div className="flex items-center gap-3 rounded-xl border border-[#DCE9EE] bg-white px-4 py-2.5 shadow-2xs dark:border-[#253F5B] dark:bg-[#12243A]">
+              <Radio className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+              <div className="min-w-0 flex-1 flex items-baseline justify-between gap-2">
+                <span className="text-xs font-medium text-[#64748B] dark:text-[#A5B4C7] truncate">
                   {t.adminKpiTodayQueues}
-                </p>
-                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600 dark:bg-emerald-950/60 dark:text-emerald-300">
-                  <Radio className="h-5 w-5" />
-                </div>
-              </div>
-              <div className="mt-3">
-                <span className="text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100">
+                </span>
+                <span className="text-sm font-bold tabular-nums text-[#14283F] dark:text-[#F1F5F9]">
                   {analytics.today_opened_queues_count}
                 </span>
               </div>
             </div>
           </div>
 
-          {/* Today's Live Ticket Throughput Breakdown */}
-          <div className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-2xs dark:border-zinc-800 dark:bg-zinc-900">
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100">
-                  {t.adminKpiTotalTickets}: {analytics.today_tickets_total}
-                </h3>
-                <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
-                  {t.adminAnalyticsSubtitle}
-                </p>
-              </div>
-
-              <Link
-                to="/admin/analytics"
-                className="inline-flex items-center gap-1.5 text-xs font-semibold text-purple-600 hover:text-purple-700 dark:text-purple-400"
-              >
-                {t.adminNavAnalytics}
-                <ArrowRight className="h-3.5 w-3.5" />
-              </Link>
-            </div>
-
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-              {/* Waiting */}
-              <div className="rounded-xl border border-amber-200 bg-amber-50/50 p-3.5 dark:border-amber-900/40 dark:bg-amber-950/20">
-                <div className="flex items-center gap-1.5 text-amber-700 dark:text-amber-400">
-                  <Clock className="h-4 w-4" />
-                  <span className="text-2xs font-bold uppercase tracking-wider">
-                    {t.adminKpiWaiting}
-                  </span>
-                </div>
-                <p className="mt-2 text-xl font-bold text-amber-900 dark:text-amber-200">
-                  {analytics.today_tickets_waiting}
-                </p>
-              </div>
-
-              {/* Called */}
-              <div className="rounded-xl border border-blue-200 bg-blue-50/50 p-3.5 dark:border-blue-900/40 dark:bg-blue-950/20">
-                <div className="flex items-center gap-1.5 text-blue-700 dark:text-blue-400">
-                  <Radio className="h-4 w-4" />
-                  <span className="text-2xs font-bold uppercase tracking-wider">
-                    {t.adminKpiCalled}
-                  </span>
-                </div>
-                <p className="mt-2 text-xl font-bold text-blue-900 dark:text-blue-200">
-                  {analytics.today_tickets_called}
-                </p>
-              </div>
-
-              {/* Serving */}
-              <div className="rounded-xl border border-indigo-200 bg-indigo-50/50 p-3.5 dark:border-indigo-900/40 dark:bg-indigo-950/20">
-                <div className="flex items-center gap-1.5 text-indigo-700 dark:text-indigo-400">
-                  <UserCheck className="h-4 w-4" />
-                  <span className="text-2xs font-bold uppercase tracking-wider">
-                    {t.adminKpiServing}
-                  </span>
-                </div>
-                <p className="mt-2 text-xl font-bold text-indigo-900 dark:text-indigo-200">
-                  {analytics.today_tickets_serving}
-                </p>
-              </div>
-
-              {/* Completed */}
-              <div className="rounded-xl border border-emerald-200 bg-emerald-50/50 p-3.5 dark:border-emerald-900/40 dark:bg-emerald-950/20">
-                <div className="flex items-center gap-1.5 text-emerald-700 dark:text-emerald-400">
-                  <CheckCircle2 className="h-4 w-4" />
-                  <span className="text-2xs font-bold uppercase tracking-wider">
-                    {t.adminKpiCompleted}
-                  </span>
-                </div>
-                <p className="mt-2 text-xl font-bold text-emerald-900 dark:text-emerald-200">
-                  {analytics.today_tickets_completed}
-                </p>
-              </div>
-
-              {/* Skipped */}
-              <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-3.5 dark:border-zinc-800 dark:bg-zinc-800/40">
-                <span className="text-2xs font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
-                  {t.adminKpiSkipped}
-                </span>
-                <p className="mt-2 text-xl font-bold text-zinc-700 dark:text-zinc-300">
-                  {analytics.today_tickets_skipped}
-                </p>
-              </div>
-
-              {/* Cancelled */}
-              <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-3.5 dark:border-zinc-800 dark:bg-zinc-800/40">
-                <span className="text-2xs font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
-                  {t.adminKpiCancelled}
-                </span>
-                <p className="mt-2 text-xl font-bold text-zinc-700 dark:text-zinc-300">
-                  {analytics.today_tickets_cancelled}
-                </p>
-              </div>
-            </div>
-          </div>
-
-          {/* Today's Doctor Queue Statuses Table */}
-          <div className="rounded-2xl border border-zinc-200 bg-white shadow-2xs dark:border-zinc-800 dark:bg-zinc-900 overflow-hidden">
-            <div className="px-6 py-4 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between">
-              <div>
-                <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100">
-                  {t.adminTodayDoctorQueues}
-                </h3>
-                <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
-                  {t.doctorsOverviewSubtitle}
-                </p>
-              </div>
-            </div>
-
-            {analytics.doctors_today.length === 0 ? (
-              <div className="p-8 text-center text-xs text-zinc-500 dark:text-zinc-400">
-                {t.adminNoQueuesToday}
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse text-xs">
-                  <thead>
-                    <tr className="border-b border-zinc-200 bg-zinc-50/75 dark:border-zinc-800 dark:bg-zinc-800/40 text-zinc-500 dark:text-zinc-400 uppercase tracking-wider font-semibold">
-                      <th className="px-5 py-3.5">{t.doctor}</th>
-                      <th className="px-5 py-3.5">{t.specialization}</th>
-                      <th className="px-5 py-3.5">{t.room}</th>
-                      <th className="px-5 py-3.5">{t.status}</th>
-                      <th className="px-5 py-3.5 text-center">{t.totalQueues}</th>
-                      <th className="px-5 py-3.5 text-center">{t.waitingCount}</th>
-                      <th className="px-5 py-3.5 text-center">{t.servingCount}</th>
-                      <th className="px-5 py-3.5 text-center">{t.completedCount}</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800/60 font-medium">
-                    {analytics.doctors_today.map((item) => (
-                      <tr
-                        key={item.doctor_id}
-                        className="hover:bg-zinc-50/60 dark:hover:bg-zinc-800/30 transition-colors"
-                      >
-                        <td className="px-5 py-3.5 text-zinc-900 dark:text-zinc-100 font-semibold">
-                          {item.doctor_name}
-                        </td>
-                        <td className="px-5 py-3.5 text-zinc-600 dark:text-zinc-300">
-                          {item.specialization_name}
-                        </td>
-                        <td className="px-5 py-3.5 text-zinc-600 dark:text-zinc-300">
-                          {item.room_number || '—'}
-                        </td>
-                        <td className="px-5 py-3.5">
-                          {item.has_queue_today ? (
-                            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-2xs font-semibold text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300">
-                              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                              {t.adminDoctorQueueStatusOpen}
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1 rounded-full bg-zinc-100 px-2.5 py-0.5 text-2xs font-semibold text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400">
-                              {t.adminDoctorQueueStatusClosed}
-                            </span>
-                          )}
-                        </td>
-                        <td className="px-5 py-3.5 text-center font-bold text-zinc-900 dark:text-zinc-100">
-                          {item.total_tickets}
-                        </td>
-                        <td className="px-5 py-3.5 text-center font-semibold text-amber-600 dark:text-amber-400">
-                          {item.waiting_tickets}
-                        </td>
-                        <td className="px-5 py-3.5 text-center font-semibold text-indigo-600 dark:text-indigo-400">
-                          {item.serving_tickets}
-                        </td>
-                        <td className="px-5 py-3.5 text-center font-semibold text-emerald-600 dark:text-emerald-400">
-                          {item.completed_tickets}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
+          {/* Interactive Today's Doctor Queue Statuses */}
+          <DoctorQueuesSection doctors={analytics.doctors_today} defaultView="table" />
         </>
       )}
     </div>

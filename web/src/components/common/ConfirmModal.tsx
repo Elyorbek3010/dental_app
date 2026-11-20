@@ -1,4 +1,5 @@
 import React from 'react';
+import { createPortal } from 'react-dom';
 import { AlertTriangle, X } from 'lucide-react';
 import { useI18n } from '../../i18n/useI18n';
 
@@ -29,13 +30,14 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
 
   if (!isOpen) return null;
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-zinc-900/60 backdrop-blur-xs animate-fadeIn">
-      <div className="relative w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl ring-1 ring-zinc-900/5 dark:bg-zinc-900 dark:ring-white/10">
+  return createPortal(
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#0B1728]/65 backdrop-blur-xs">
+      <div className="relative w-full max-w-md max-h-[90vh] overflow-y-auto rounded-2xl border border-[#DCE9EE] bg-white p-6 shadow-2xl dark:border-[#253F5B] dark:bg-[#1A3047]">
         <button
+          type="button"
           onClick={onCancel}
           disabled={isLoading}
-          className="absolute top-4 right-4 rounded-lg p-1 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-600 dark:hover:bg-zinc-800 dark:hover:text-zinc-300"
+          className="absolute top-4 right-4 rounded-lg p-1 text-[#64748B] hover:bg-[#EDF6F8] hover:text-[#14283F] dark:text-[#A5B4C7] dark:hover:bg-[#12243A] dark:hover:text-[#F1F5F9] cursor-pointer"
         >
           <X className="h-5 w-5" />
         </button>
@@ -52,10 +54,10 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
           </div>
 
           <div className="flex-1">
-            <h3 className="text-base font-semibold text-zinc-900 dark:text-zinc-100">
+            <h3 className="text-base font-bold text-[#14283F] dark:text-[#F1F5F9]">
               {title}
             </h3>
-            <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400 leading-relaxed">
+            <p className="mt-2 text-sm text-[#64748B] dark:text-[#A5B4C7] leading-relaxed">
               {message}
             </p>
           </div>
@@ -66,7 +68,7 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
             type="button"
             onClick={onCancel}
             disabled={isLoading}
-            className="rounded-xl border border-zinc-300 px-4 py-2.5 text-sm font-medium text-zinc-700 hover:bg-zinc-50 disabled:opacity-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
+            className="rounded-xl border border-[#DCE9EE] bg-white px-4 py-2.5 text-sm font-semibold text-[#14283F] hover:bg-[#EDF6F8] disabled:opacity-50 dark:border-[#253F5B] dark:bg-[#12243A] dark:text-[#F1F5F9] dark:hover:bg-[#0B1728] cursor-pointer"
           >
             {cancelLabel || t.cancel}
           </button>
@@ -74,10 +76,10 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
             type="button"
             onClick={onConfirm}
             disabled={isLoading}
-            className={`rounded-xl px-4 py-2.5 text-sm font-medium text-white shadow-sm disabled:opacity-50 flex items-center gap-2 ${
+            className={`rounded-xl px-4 py-2.5 text-sm font-semibold text-white shadow-sm disabled:opacity-50 flex items-center gap-2 cursor-pointer ${
               isDestructive
-                ? 'bg-rose-600 hover:bg-rose-700 focus:ring-rose-500'
-                : 'bg-indigo-600 hover:bg-indigo-700 focus:ring-indigo-500'
+                ? 'bg-rose-600 hover:bg-rose-700'
+                : 'bg-[#0D9488] hover:bg-[#0F766E] dark:bg-[#14B8A6] dark:text-[#07131D] dark:hover:bg-[#2DD4BF]'
             }`}
           >
             {isLoading && (
@@ -87,6 +89,7 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };

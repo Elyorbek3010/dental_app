@@ -4,22 +4,26 @@ import '../l10n/l10n.dart';
 import '../models/user.dart';
 import '../services/auth_controller.dart';
 import '../services/locale_controller.dart';
+import '../services/theme_controller.dart';
 import '../theme/app_theme.dart';
+import '../widgets/dental_surfaces.dart';
 
 /// Patient Profile Screen.
 ///
 /// Displays real authenticated patient information from the backend `/api/auth/me`,
-/// provides language switching across Uzbek, Russian, and English,
+/// provides Light/Dark/System theme switching and Uzbek/Russian/English language switching,
 /// and allows the patient to log out.
 class ProfileScreen extends StatelessWidget {
   const ProfileScreen({
     super.key,
     this.authController,
     this.localeController,
+    this.themeController,
   });
 
   final AuthController? authController;
   final LocaleController? localeController;
+  final ThemeController? themeController;
 
   Future<void> _handleLogout(
     BuildContext context,
@@ -50,7 +54,7 @@ class ProfileScreen extends StatelessWidget {
             TextButton(
               key: const Key('profile_confirm_logout_button'),
               onPressed: () => Navigator.pop(dialogContext, true),
-              style: TextButton.styleFrom(foregroundColor: AppTheme.error),
+              style: TextButton.styleFrom(foregroundColor: context.dentalColors.error),
               child: Text(l10n.logoutButton),
             ),
           ],
@@ -80,137 +84,228 @@ class ProfileScreen extends StatelessWidget {
   Widget _buildContent(BuildContext context, AuthController? controller) {
     final PatientUser? user = controller?.currentUser;
     final l10n = context.l10n;
+    final colors = context.dentalColors;
     final activeLocaleCtrl = localeController ?? LocaleController.instance;
+    final activeThemeCtrl = themeController ?? ThemeController.instance;
 
     return Scaffold(
       appBar: AppBar(
         title: Text(l10n.profileTitle),
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // User Avatar & Name Card
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: AppTheme.surface,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: AppTheme.cardBorder),
-              ),
-              child: Column(
-                children: [
-                  CircleAvatar(
-                    radius: 36,
-                    backgroundColor: AppTheme.primaryLight,
-                    child: Text(
-                      user != null && user.fullName.isNotEmpty
-                          ? user.fullName[0].toUpperCase()
-                          : 'B',
-                      style: const TextStyle(
-                        fontSize: 28,
-                        fontWeight: FontWeight.bold,
-                        color: AppTheme.primaryDark,
+            // Architectural Identity Header Card
+            DentalWaveBackdrop(
+              child: Padding(
+                padding: const EdgeInsets.all(22),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 64,
+                      height: 64,
+                      decoration: BoxDecoration(
+                        color: colors.tealSoft,
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(
+                          color: colors.teal.withValues(alpha: 0.35),
+                        ),
+                      ),
+                      alignment: Alignment.center,
+                      child: Text(
+                        user != null && user.fullName.isNotEmpty
+                            ? user.fullName[0].toUpperCase()
+                            : 'B',
+                        style: TextStyle(
+                          fontSize: 26,
+                          fontWeight: FontWeight.w800,
+                          color: colors.teal,
+                        ),
                       ),
                     ),
-                  ),
-                  const SizedBox(height: 14),
-                  Text(
-                    user != null && user.fullName.isNotEmpty
-                        ? user.fullName
-                        : l10n.patientDefaultName,
-                    style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w700,
-                      color: AppTheme.textPrimary,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 4,
-                    ),
-                    decoration: BoxDecoration(
-                      color: (user?.isActive ?? false)
-                          ? AppTheme.success.withValues(alpha: 0.1)
-                          : AppTheme.background,
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: AppTheme.cardBorder),
-                    ),
-                    child: Text(
-                      user != null
-                          ? (user.isActive
-                              ? l10n.activeAccountBadge
-                              : l10n.inactiveAccountBadge)
-                          : l10n.accountNotLoadedBadge,
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: (user?.isActive ?? false)
-                            ? AppTheme.success
-                            : AppTheme.textSecondary,
-                        fontWeight: FontWeight.w600,
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            user != null && user.fullName.isNotEmpty
+                                ? user.fullName
+                                : l10n.patientDefaultName,
+                            style: TextStyle(
+                              fontSize: 18.5,
+                              fontWeight: FontWeight.w800,
+                              color: colors.textPrimary,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            l10n.clinicPortalBadge,
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: colors.teal,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              color: (user?.isActive ?? false)
+                                  ? colors.successSoft
+                                  : colors.surfaceMuted,
+                              borderRadius: BorderRadius.circular(999),
+                              border: Border.all(
+                                color: (user?.isActive ?? false)
+                                    ? colors.success.withValues(alpha: 0.35)
+                                    : colors.border,
+                              ),
+                            ),
+                            child: Text(
+                              user != null
+                                  ? (user.isActive
+                                      ? l10n.activeAccountBadge
+                                      : l10n.inactiveAccountBadge)
+                                  : l10n.accountNotLoadedBadge,
+                              style: TextStyle(
+                                fontSize: 11.5,
+                                color: (user?.isActive ?? false)
+                                    ? colors.success
+                                    : colors.textSecondary,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
             const SizedBox(height: 20),
 
-            // Language Selector Card (UZ / RU / EN)
+            // Grouped Preferences Card: Theme (Light/Dark/System) + Language (UZ/RU/EN)
             Container(
               width: double.infinity,
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.all(18),
               decoration: BoxDecoration(
-                color: AppTheme.surface,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: AppTheme.cardBorder),
+                color: colors.surface,
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(color: colors.border),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
                     children: [
-                      const Icon(
-                        Icons.language_outlined,
+                      Icon(
+                        Icons.palette_outlined,
                         size: 20,
-                        color: AppTheme.primary,
+                        color: colors.teal,
                       ),
                       const SizedBox(width: 10),
                       Text(
-                        l10n.languageSectionTitle,
-                        style: const TextStyle(
+                        l10n.themeSectionTitle,
+                        style: TextStyle(
                           fontSize: 15,
                           fontWeight: FontWeight.w700,
-                          color: AppTheme.textPrimary,
+                          color: colors.textPrimary,
                         ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 14),
+                  const SizedBox(height: 12),
+                  ListenableBuilder(
+                    listenable: activeThemeCtrl,
+                    builder: (context, _) {
+                      final freshColors = context.dentalColors;
+                      final mode = activeThemeCtrl.themeMode;
+                      return Row(
+                        children: [
+                          _buildSegmentedChoice(
+                            colors: freshColors,
+                            key: const Key('theme_option_light'),
+                            icon: Icons.light_mode_outlined,
+                            label: l10n.themeLight,
+                            isSelected: mode == ThemeMode.light,
+                            onSelect: () => activeThemeCtrl.setThemeMode(ThemeMode.light),
+                          ),
+                          const SizedBox(width: 8),
+                          _buildSegmentedChoice(
+                            colors: freshColors,
+                            key: const Key('theme_option_dark'),
+                            icon: Icons.dark_mode_outlined,
+                            label: l10n.themeDark,
+                            isSelected: mode == ThemeMode.dark,
+                            onSelect: () => activeThemeCtrl.setThemeMode(ThemeMode.dark),
+                          ),
+                          const SizedBox(width: 8),
+                          _buildSegmentedChoice(
+                            colors: freshColors,
+                            key: const Key('theme_option_system'),
+                            icon: Icons.settings_brightness_outlined,
+                            label: l10n.themeSystem,
+                            isSelected: mode == ThemeMode.system,
+                            onSelect: () => activeThemeCtrl.setThemeMode(ThemeMode.system),
+                          ),
+                        ],
+                      );
+                    },
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    child: Divider(height: 1, color: colors.border),
+                  ),
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.language_outlined,
+                        size: 20,
+                        color: colors.blue,
+                      ),
+                      const SizedBox(width: 10),
+                      Text(
+                        l10n.languageSectionTitle,
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w700,
+                          color: colors.textPrimary,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
                   ListenableBuilder(
                     listenable: activeLocaleCtrl,
                     builder: (context, _) {
+                      final freshColors = context.dentalColors;
                       final currentCode = activeLocaleCtrl.languageCode;
                       return Row(
                         children: [
-                          _buildLanguageChoice(
+                          _buildSegmentedChoice(
+                            colors: freshColors,
                             key: const Key('language_option_uz'),
                             label: l10n.languageUzbek,
                             isSelected: currentCode == 'uz',
                             onSelect: () => activeLocaleCtrl.setLanguageCode('uz'),
                           ),
                           const SizedBox(width: 8),
-                          _buildLanguageChoice(
+                          _buildSegmentedChoice(
+                            colors: freshColors,
                             key: const Key('language_option_ru'),
                             label: l10n.languageRussian,
                             isSelected: currentCode == 'ru',
                             onSelect: () => activeLocaleCtrl.setLanguageCode('ru'),
                           ),
                           const SizedBox(width: 8),
-                          _buildLanguageChoice(
+                          _buildSegmentedChoice(
+                            colors: freshColors,
                             key: const Key('language_option_en'),
                             label: l10n.languageEnglish,
                             isSelected: currentCode == 'en',
@@ -223,61 +318,51 @@ class ProfileScreen extends StatelessWidget {
                 ],
               ),
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 16),
 
-            // Account Information Details
+            // Unified Account & System Details Card
             Container(
               width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
               decoration: BoxDecoration(
-                color: AppTheme.surface,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: AppTheme.cardBorder),
+                color: colors.surface,
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(color: colors.border),
               ),
               child: Column(
                 children: [
                   _buildProfileTile(
+                    colors: colors,
                     icon: Icons.phone_outlined,
                     title: l10n.phoneProfileLabel,
                     value: user?.phone ?? l10n.notAssigned,
                   ),
-                  const Divider(height: 1, color: AppTheme.cardBorder),
+                  Divider(height: 1, color: colors.border),
                   _buildProfileTile(
+                    colors: colors,
                     icon: Icons.badge_outlined,
                     title: l10n.userRoleProfileLabel,
                     value: user != null
                         ? l10n.patientRoleValue(user.role)
                         : l10n.patientRoleFallback,
                   ),
-                  const Divider(height: 1, color: AppTheme.cardBorder),
+                  Divider(height: 1, color: colors.border),
                   _buildProfileTile(
+                    colors: colors,
                     icon: Icons.notifications_none_outlined,
                     title: l10n.pushNotificationsProfileLabel,
                     value: l10n.pushNotificationsActiveValue,
                   ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 20),
-
-            // App & System Information
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              decoration: BoxDecoration(
-                color: AppTheme.surface,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: AppTheme.cardBorder),
-              ),
-              child: Column(
-                children: [
+                  Divider(height: 1, color: colors.border),
                   _buildProfileTile(
+                    colors: colors,
                     icon: Icons.local_hospital_outlined,
                     title: l10n.systemProfileLabel,
                     value: 'Dental Clinic Queue V1',
                   ),
-                  const Divider(height: 1, color: AppTheme.cardBorder),
+                  Divider(height: 1, color: colors.border),
                   _buildProfileTile(
+                    colors: colors,
                     icon: Icons.info_outline,
                     title: l10n.appVersionProfileLabel,
                     value: '1.0.0',
@@ -285,7 +370,7 @@ class ProfileScreen extends StatelessWidget {
                 ],
               ),
             ),
-            const SizedBox(height: 28),
+            const SizedBox(height: 24),
 
             // Logout Button
             SizedBox(
@@ -293,13 +378,13 @@ class ProfileScreen extends StatelessWidget {
               child: OutlinedButton.icon(
                 key: const Key('profile_logout_button'),
                 onPressed: () => _handleLogout(context, controller, l10n),
-                icon: const Icon(Icons.logout, color: AppTheme.error, size: 20),
+                icon: Icon(Icons.logout_rounded, color: colors.error, size: 20),
                 label: Text(
                   l10n.logoutButton,
-                  style: const TextStyle(color: AppTheme.error),
+                  style: TextStyle(color: colors.error),
                 ),
                 style: OutlinedButton.styleFrom(
-                  side: const BorderSide(color: AppTheme.error),
+                  side: BorderSide(color: colors.error.withValues(alpha: 0.7)),
                   padding: const EdgeInsets.symmetric(vertical: 14),
                 ),
               ),
@@ -310,35 +395,55 @@ class ProfileScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildLanguageChoice({
+  Widget _buildSegmentedChoice({
+    required DentalThemeTokens colors,
     required Key key,
     required String label,
     required bool isSelected,
     required VoidCallback onSelect,
+    IconData? icon,
   }) {
     return Expanded(
       child: InkWell(
         key: key,
         onTap: onSelect,
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(12),
         child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 10),
+          padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 6),
           decoration: BoxDecoration(
-            color: isSelected ? AppTheme.primary : AppTheme.background,
-            borderRadius: BorderRadius.circular(10),
+            color: isSelected ? colors.teal : colors.surfaceMuted,
+            borderRadius: BorderRadius.circular(12),
             border: Border.all(
-              color: isSelected ? AppTheme.primary : AppTheme.cardBorder,
+              color: isSelected ? colors.teal : colors.border,
             ),
           ),
           alignment: Alignment.center,
-          child: Text(
-            label,
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-              color: isSelected ? Colors.white : AppTheme.textPrimary,
-            ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (icon != null) ...[
+                Icon(
+                  icon,
+                  size: 15,
+                  color: isSelected ? Colors.white : colors.textSecondary,
+                ),
+                const SizedBox(width: 5),
+              ],
+              Flexible(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: isSelected ? FontWeight.w700 : FontWeight.w600,
+                    color: isSelected ? Colors.white : colors.textPrimary,
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       ),
@@ -346,6 +451,7 @@ class ProfileScreen extends StatelessWidget {
   }
 
   Widget _buildProfileTile({
+    required DentalThemeTokens colors,
     required IconData icon,
     required String title,
     required String value,
@@ -354,24 +460,24 @@ class ProfileScreen extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 12),
       child: Row(
         children: [
-          Icon(icon, size: 22, color: AppTheme.textSecondary),
+          Icon(icon, size: 22, color: colors.textSecondary),
           const SizedBox(width: 14),
           Expanded(
             child: Text(
               title,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 14,
-                color: AppTheme.textPrimary,
+                color: colors.textPrimary,
                 fontWeight: FontWeight.w500,
               ),
             ),
           ),
           Text(
             value,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 13,
-              color: AppTheme.textSecondary,
-              fontWeight: FontWeight.w500,
+              color: colors.textSecondary,
+              fontWeight: FontWeight.w600,
             ),
           ),
         ],

@@ -107,8 +107,8 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   const Icon(
-                    Icons.qr_code_scanner,
-                    color: AppTheme.primary,
+                    Icons.qr_code_scanner_rounded,
+                    color: AppTheme.accent,
                     size: 40,
                   ),
                   const SizedBox(height: 12),
@@ -119,6 +119,7 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
                     style: const TextStyle(
                       color: Colors.white,
                       fontSize: 15,
+                      fontWeight: FontWeight.w500,
                       height: 1.4,
                     ),
                   ),
@@ -130,14 +131,20 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
           // --- Viewfinder frame ---
           Center(
             child: Container(
-              width: 240,
-              height: 240,
+              width: 248,
+              height: 248,
               decoration: BoxDecoration(
                 border: Border.all(
-                  color: AppTheme.primary,
+                  color: AppTheme.accent,
                   width: 3,
                 ),
-                borderRadius: BorderRadius.circular(16),
+                borderRadius: BorderRadius.circular(24),
+                boxShadow: [
+                  BoxShadow(
+                    color: AppTheme.accent.withValues(alpha: 0.2),
+                    blurRadius: 24,
+                  ),
+                ],
               ),
             ),
           ),

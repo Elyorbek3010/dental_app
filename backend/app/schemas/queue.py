@@ -89,6 +89,7 @@ class MyQueueTicketResponse(BaseModel):
     id: int
     queue_id: int
     ticket_number: int
+    queue_position: int | None = None
     status: TicketStatus
     created_at: datetime
     people_ahead: int

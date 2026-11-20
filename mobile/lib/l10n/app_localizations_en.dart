@@ -684,4 +684,34 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get syncConnectionWarning =>
       'Connection lost. Showing last known status; retrying...';
+
+  @override
+  String get themeSectionTitle => 'Appearance';
+
+  @override
+  String get themeLight => 'Light';
+
+  @override
+  String get themeDark => 'Dark';
+
+  @override
+  String get themeSystem => 'System';
+
+  @override
+  String get quickAccessTitle => 'Quick Services';
+
+  @override
+  String get activeVisitStatusTitle => 'Active Visit';
+
+  @override
+  String get viewLiveQueueLabel => 'Live Queue';
+
+  @override
+  String get clinicPortalBadge => 'Dental Care Portal';
+
+  @override
+  String get searchSpecialtiesHint => 'Search dental specialty...';
+
+  @override
+  String get chooseCareSubtitle => 'Select department to view doctors';
 }

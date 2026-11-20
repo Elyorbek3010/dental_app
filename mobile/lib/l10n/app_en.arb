@@ -218,5 +218,15 @@
   "pausedCountdownBadge": "Paused",
   "alreadyJoinedSpecializationError": "You already have an active ticket in this specialization.",
   "queuePausedBadge": "Queue paused",
-  "syncConnectionWarning": "Connection lost. Showing last known status; retrying..."
+  "syncConnectionWarning": "Connection lost. Showing last known status; retrying...",
+  "themeSectionTitle": "Appearance",
+  "themeLight": "Light",
+  "themeDark": "Dark",
+  "themeSystem": "System",
+  "quickAccessTitle": "Quick Services",
+  "activeVisitStatusTitle": "Active Visit",
+  "viewLiveQueueLabel": "Live Queue",
+  "clinicPortalBadge": "Dental Care Portal",
+  "searchSpecialtiesHint": "Search dental specialty...",
+  "chooseCareSubtitle": "Select department to view doctors"
 }

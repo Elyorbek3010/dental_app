@@ -1,5 +1,6 @@
 import { apiClient } from './client';
 import type {
+  CheckInQRResponse,
   Doctor,
   QueueResponse,
   QueueTicket,
@@ -116,5 +117,15 @@ export async function addWalkInPatient(
   return apiClient<QueueTicket>(`/api/queues/${queueId}/walk-in`, {
     method: 'POST',
     body: JSON.stringify(data),
+  });
+}
+
+export async function fetchCheckInQrToken(clinicId?: number): Promise<CheckInQRResponse> {
+  const url =
+    clinicId !== undefined
+      ? `/api/queues/check-in/qr-token?clinic_id=${clinicId}`
+      : '/api/queues/check-in/qr-token';
+  return apiClient<CheckInQRResponse>(url, {
+    method: 'GET',
   });
 }

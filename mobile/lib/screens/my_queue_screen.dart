@@ -10,7 +10,11 @@ import '../services/queue_realtime_service.dart';
 import '../services/queue_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/error_localizer.dart';
+import '../widgets/circular_countdown.dart';
+import '../widgets/dental_surfaces.dart';
 import '../widgets/empty_state_card.dart';
+import '../widgets/loading_skeleton.dart';
+import '../widgets/status_chip.dart';
 import 'qr_scanner_screen.dart';
 import 'specialization_select_screen.dart';
 
@@ -27,12 +31,14 @@ import 'specialization_select_screen.dart';
 class MyQueueScreen extends StatefulWidget {
   const MyQueueScreen({
     super.key,
+    this.isActiveTab = true,
     this.queueService,
     this.pushNotificationService,
     this.realtimeService,
     this.nowProvider,
   });
 
+  final bool isActiveTab;
   final QueueService? queueService;
   final PushNotificationService? pushNotificationService;
   final QueueRealtimeService? realtimeService;
@@ -90,6 +96,14 @@ class _MyQueueScreenState extends State<MyQueueScreen> with WidgetsBindingObserv
     _realtimeService = widget.realtimeService ?? QueueRealtimeService.instance;
     _fetchMyTickets();
     _subscribeToQueueEvents();
+  }
+
+  @override
+  void didUpdateWidget(covariant MyQueueScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!oldWidget.isActiveTab && widget.isActiveTab) {
+      unawaited(_fetchMyTickets(isSilent: _tickets.isNotEmpty));
+    }
   }
 
   @override
@@ -413,7 +427,10 @@ class _MyQueueScreenState extends State<MyQueueScreen> with WidgetsBindingObserv
 
     try {
       _queueService.setIncludeSkipped(true);
-      final tickets = await _queueService.getMyTickets();
+      final rawTickets = await _queueService.getMyTickets();
+      final tickets = rawTickets
+          .where((t) => !t.isCompleted && !t.isCancelled)
+          .toList();
       if (!mounted || fetchSeq != _latestFetchSeq) return;
 
       setState(() {
@@ -669,8 +686,10 @@ class _MyQueueScreenState extends State<MyQueueScreen> with WidgetsBindingObserv
   }
 
   Widget _buildBody(AppLocalizations l10n) {
+    final colors = context.dentalColors;
+
     if (_isLoading) {
-      return const Center(child: CircularProgressIndicator());
+      return const LoadingSkeleton(itemCount: 3);
     }
 
     if (_errorMessage != null) {
@@ -712,7 +731,7 @@ class _MyQueueScreenState extends State<MyQueueScreen> with WidgetsBindingObserv
                 onButtonPressed: () => _navigateToQueueFlow(context),
               ),
               const SizedBox(height: 24),
-              _buildFeatureOverviewCard(l10n),
+              _buildFeatureOverviewCard(l10n, colors),
             ],
           ),
         ),
@@ -729,29 +748,21 @@ class _MyQueueScreenState extends State<MyQueueScreen> with WidgetsBindingObserv
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             if (_showSyncWarning) ...[
-              _buildSyncWarningBanner(l10n),
+              _buildSyncWarningBanner(l10n, colors),
               const SizedBox(height: 14),
             ],
             for (int i = 0; i < _tickets.length; i++) ...[
-              _buildSpecialistSection(_tickets[i], l10n),
+              _buildSpecialistSection(_tickets[i], l10n, colors),
               if (i < _tickets.length - 1) const SizedBox(height: 24),
             ],
             const SizedBox(height: 20),
-            _buildImportantNotesCard(l10n),
+            _buildImportantNotesCard(l10n, colors),
             const SizedBox(height: 14),
             OutlinedButton.icon(
               key: const Key('join_another_queue_button'),
               onPressed: () => _navigateToQueueFlow(context),
               icon: const Icon(Icons.add_circle_outline),
               label: Text(l10n.homeJoinQueueButton),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: AppTheme.primary,
-                side: const BorderSide(color: AppTheme.primary),
-                padding: const EdgeInsets.symmetric(vertical: 14),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
             ),
           ],
         ),
@@ -759,26 +770,26 @@ class _MyQueueScreenState extends State<MyQueueScreen> with WidgetsBindingObserv
     );
   }
 
-  Widget _buildSyncWarningBanner(AppLocalizations l10n) {
+  Widget _buildSyncWarningBanner(AppLocalizations l10n, DentalThemeTokens colors) {
     return Container(
       key: const Key('my_queue_connection_warning'),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
-        color: AppTheme.warning.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppTheme.warning.withValues(alpha: 0.45)),
+        color: colors.warningSoft,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: colors.warning.withValues(alpha: 0.45)),
       ),
       child: Row(
         children: [
-          const Icon(Icons.wifi_off_rounded, color: AppTheme.warning, size: 20),
+          Icon(Icons.wifi_off_rounded, color: colors.warning, size: 20),
           const SizedBox(width: 10),
           Expanded(
             child: Text(
               l10n.syncConnectionWarning,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
-                color: AppTheme.textPrimary,
+                color: colors.textPrimary,
                 height: 1.3,
               ),
             ),
@@ -801,7 +812,11 @@ class _MyQueueScreenState extends State<MyQueueScreen> with WidgetsBindingObserv
     );
   }
 
-  Widget _buildSpecialistSection(MyQueueTicket ticket, AppLocalizations l10n) {
+  Widget _buildSpecialistSection(
+    MyQueueTicket ticket,
+    AppLocalizations l10n,
+    DentalThemeTokens colors,
+  ) {
     return Column(
       key: Key('specialist_ticket_section_${ticket.id}'),
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -811,21 +826,21 @@ class _MyQueueScreenState extends State<MyQueueScreen> with WidgetsBindingObserv
             key: Key('paused_banner_${ticket.id}'),
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
             decoration: BoxDecoration(
-              color: AppTheme.warning.withValues(alpha: 0.14),
+              color: colors.warningSoft,
               borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: AppTheme.warning.withValues(alpha: 0.45)),
+              border: Border.all(color: colors.warning.withValues(alpha: 0.45)),
             ),
             child: Row(
               children: [
-                const Icon(Icons.pause_circle_outline, color: AppTheme.warning, size: 20),
+                Icon(Icons.pause_circle_outline, color: colors.warning, size: 20),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
                     l10n.queuePausedBadge,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w700,
-                      color: AppTheme.textPrimary,
+                      color: colors.textPrimary,
                     ),
                   ),
                 ),
@@ -836,29 +851,29 @@ class _MyQueueScreenState extends State<MyQueueScreen> with WidgetsBindingObserv
         ],
 
         // CALLED: prominent banner
-        if (ticket.isCalled) _buildCalledBanner(ticket, l10n),
+        if (ticket.isCalled) _buildCalledBanner(ticket, l10n, colors),
 
         // SERVING: in-progress banner
-        if (ticket.isServing) _buildServingBanner(l10n),
+        if (ticket.isServing) _buildServingBanner(l10n, colors),
 
         // SKIPPED: skipped banner explaining reception must restore
-        if (ticket.isSkipped) _buildSkippedBanner(l10n),
+        if (ticket.isSkipped) _buildSkippedBanner(l10n, colors),
 
         if (ticket.isCalled || ticket.isServing || ticket.isSkipped)
           const SizedBox(height: 14),
 
-        _buildTicketCard(ticket, l10n),
+        _buildTicketCard(ticket, l10n, colors),
         const SizedBox(height: 14),
 
         // Check-in card (only when WAITING and not already checked in)
         if (ticket.isWaiting) ...[
-          _buildCheckInCard(ticket, l10n),
+          _buildCheckInCard(ticket, l10n, colors),
           const SizedBox(height: 14),
         ],
 
         // Cancel button — allowed for WAITING, CALLED, or SKIPPED
         if (ticket.isWaiting || ticket.isCalled || ticket.isSkipped)
-          _buildCancelButton(ticket, l10n),
+          _buildCancelButton(ticket, l10n, colors),
       ],
     );
   }
@@ -867,21 +882,26 @@ class _MyQueueScreenState extends State<MyQueueScreen> with WidgetsBindingObserv
   // CALLED Banner
   // ---------------------------------------------------------------------------
 
-  Widget _buildCalledBanner(MyQueueTicket ticket, AppLocalizations l10n) {
+  Widget _buildCalledBanner(
+    MyQueueTicket ticket,
+    AppLocalizations l10n,
+    DentalThemeTokens colors,
+  ) {
+    final remaining = _remainingCallSeconds(ticket);
+
     return Container(
       key: const Key('called_banner'),
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            AppTheme.warning,
-            AppTheme.warning.withValues(alpha: 0.8),
-          ],
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFFD97706), Color(0xFFF59E0B)],
         ),
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(22),
         boxShadow: [
           BoxShadow(
-            color: AppTheme.warning.withValues(alpha: 0.35),
+            color: colors.warning.withValues(alpha: 0.3),
             blurRadius: 18,
             offset: const Offset(0, 8),
           ),
@@ -889,8 +909,8 @@ class _MyQueueScreenState extends State<MyQueueScreen> with WidgetsBindingObserv
       ),
       child: Row(
         children: [
-          const Icon(Icons.notifications_active, color: Colors.white, size: 36),
-          const SizedBox(width: 16),
+          const Icon(Icons.notifications_active_rounded, color: Colors.white, size: 34),
+          const SizedBox(width: 14),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -899,7 +919,7 @@ class _MyQueueScreenState extends State<MyQueueScreen> with WidgetsBindingObserv
                   l10n.calledBannerTitle,
                   key: const Key('called_banner_title'),
                   style: const TextStyle(
-                    fontSize: 20,
+                    fontSize: 19,
                     fontWeight: FontWeight.w900,
                     color: Colors.white,
                   ),
@@ -931,7 +951,7 @@ class _MyQueueScreenState extends State<MyQueueScreen> with WidgetsBindingObserv
                       ),
                     ),
                   ),
-                if (_remainingCallSeconds(ticket) case final int remaining)
+                if (remaining != null)
                   Padding(
                     padding: const EdgeInsets.only(top: 10),
                     child: Container(
@@ -941,10 +961,10 @@ class _MyQueueScreenState extends State<MyQueueScreen> with WidgetsBindingObserv
                         vertical: 5,
                       ),
                       decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.2),
+                        color: Colors.white.withValues(alpha: 0.22),
                         borderRadius: BorderRadius.circular(10),
                         border: Border.all(
-                          color: Colors.white.withValues(alpha: 0.35),
+                          color: Colors.white.withValues(alpha: 0.4),
                         ),
                       ),
                       child: Row(
@@ -956,14 +976,19 @@ class _MyQueueScreenState extends State<MyQueueScreen> with WidgetsBindingObserv
                             size: 16,
                           ),
                           const SizedBox(width: 6),
-                          Text(
-                            ticket.isQueuePaused
-                                ? '${l10n.remainingTimeLabel}: ${_formatCountdownMmSs(remaining)} (${l10n.pausedCountdownBadge})'
-                                : '${l10n.remainingTimeLabel}: ${_formatCountdownMmSs(remaining)}',
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.w800,
-                              fontSize: 13,
+                          Flexible(
+                            child: Text(
+                              ticket.isQueuePaused
+                                  ? '${l10n.remainingTimeLabel}: ${_formatCountdownMmSs(remaining)} (${l10n.pausedCountdownBadge})'
+                                  : '${l10n.remainingTimeLabel}: ${_formatCountdownMmSs(remaining)}',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w800,
+                                fontSize: 12.5,
+                                fontFeatures: [FontFeature.tabularFigures()],
+                              ),
                             ),
                           ),
                         ],
@@ -973,6 +998,21 @@ class _MyQueueScreenState extends State<MyQueueScreen> with WidgetsBindingObserv
               ],
             ),
           ),
+          if (remaining != null) ...[
+            const SizedBox(width: 10),
+            Container(
+              padding: const EdgeInsets.all(6),
+              decoration: BoxDecoration(
+                color: colors.surface,
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: CircularCountdown(
+                remainingSeconds: remaining,
+                isPaused: ticket.isQueuePaused,
+                size: 56,
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -982,21 +1022,20 @@ class _MyQueueScreenState extends State<MyQueueScreen> with WidgetsBindingObserv
   // SERVING Banner
   // ---------------------------------------------------------------------------
 
-  Widget _buildServingBanner(AppLocalizations l10n) {
+  Widget _buildServingBanner(AppLocalizations l10n, DentalThemeTokens colors) {
     return Container(
       key: const Key('serving_banner'),
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            AppTheme.success,
-            AppTheme.success.withValues(alpha: 0.8),
-          ],
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFF0F766E), Color(0xFF0D9488)],
         ),
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(22),
         boxShadow: [
           BoxShadow(
-            color: AppTheme.success.withValues(alpha: 0.3),
+            color: colors.teal.withValues(alpha: 0.28),
             blurRadius: 16,
             offset: const Offset(0, 6),
           ),
@@ -1004,7 +1043,7 @@ class _MyQueueScreenState extends State<MyQueueScreen> with WidgetsBindingObserv
       ),
       child: Row(
         children: [
-          const Icon(Icons.medical_services, color: Colors.white, size: 36),
+          const Icon(Icons.medical_services_rounded, color: Colors.white, size: 34),
           const SizedBox(width: 16),
           Expanded(
             child: Column(
@@ -1043,19 +1082,19 @@ class _MyQueueScreenState extends State<MyQueueScreen> with WidgetsBindingObserv
   // SKIPPED Banner
   // ---------------------------------------------------------------------------
 
-  Widget _buildSkippedBanner(AppLocalizations l10n) {
+  Widget _buildSkippedBanner(AppLocalizations l10n, DentalThemeTokens colors) {
     return Container(
       key: const Key('skipped_banner'),
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: AppTheme.warning.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: AppTheme.warning.withValues(alpha: 0.5)),
+        color: colors.errorSoft,
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: colors.error.withValues(alpha: 0.45)),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(Icons.pause_circle_outline, color: AppTheme.warning, size: 32),
+          Icon(Icons.warning_amber_rounded, color: colors.error, size: 30),
           const SizedBox(width: 14),
           Expanded(
             child: Column(
@@ -1064,19 +1103,19 @@ class _MyQueueScreenState extends State<MyQueueScreen> with WidgetsBindingObserv
                 Text(
                   l10n.skippedBannerTitle,
                   key: const Key('skipped_banner_title'),
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 17,
                     fontWeight: FontWeight.w800,
-                    color: AppTheme.textPrimary,
+                    color: colors.textPrimary,
                   ),
                 ),
                 const SizedBox(height: 4),
                 Text(
                   l10n.skippedBannerSubtitle,
                   key: const Key('skipped_banner_subtitle'),
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 13,
-                    color: AppTheme.textSecondary,
+                    color: colors.textSecondary,
                     height: 1.35,
                   ),
                 ),
@@ -1092,186 +1131,233 @@ class _MyQueueScreenState extends State<MyQueueScreen> with WidgetsBindingObserv
   // Ticket Card
   // ---------------------------------------------------------------------------
 
-  Widget _buildTicketCard(MyQueueTicket ticket, AppLocalizations l10n) {
-    Color statusColor;
-    Color statusBgColor;
+  Widget _buildTicketCard(
+    MyQueueTicket ticket,
+    AppLocalizations l10n,
+    DentalThemeTokens colors,
+  ) {
+    final Color statusAccent = ticket.isCalled
+        ? colors.warning
+        : ticket.isServing
+            ? colors.teal
+            : ticket.isSkipped
+                ? colors.error
+                : colors.blue;
 
-    switch (ticket.status.toUpperCase()) {
-      case 'CALLED':
-        statusColor = AppTheme.warning;
-        statusBgColor = AppTheme.warning.withValues(alpha: 0.15);
-        break;
-      case 'SERVING':
-        statusColor = AppTheme.success;
-        statusBgColor = AppTheme.success.withValues(alpha: 0.15);
-        break;
-      case 'SKIPPED':
-        statusColor = AppTheme.warning;
-        statusBgColor = AppTheme.warning.withValues(alpha: 0.15);
-        break;
-      case 'WAITING':
-      default:
-        statusColor = AppTheme.primary;
-        statusBgColor = AppTheme.primaryLight;
-        break;
-    }
-
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: AppTheme.cardBorder),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 16,
-            offset: const Offset(0, 6),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          // Top header
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-            decoration: BoxDecoration(
-              color: AppTheme.surface,
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-              border: const Border(bottom: BorderSide(color: AppTheme.cardBorder)),
-            ),
-            child: Row(
+    return TicketPassCard(
+      accentColor: statusAccent,
+      topSection: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 18, 20, 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // Specialty & Status header bar
+            Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Row(
-                  children: [
-                    const Icon(
-                      Icons.confirmation_number_outlined,
-                      color: AppTheme.primary,
-                      size: 20,
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      l10n.ticketNumberLabel,
-                      style: const TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: AppTheme.textSecondary,
+                Expanded(
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.confirmation_number_outlined,
+                        color: statusAccent,
+                        size: 18,
                       ),
-                    ),
-                  ],
+                      const SizedBox(width: 8),
+                      Flexible(
+                        child: Text(
+                          l10n.ticketNumberLabel,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                            color: colors.textSecondary,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: statusBgColor,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Text(
-                    ticket.localizedStatus(l10n),
-                    key: const Key('my_ticket_status_badge'),
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                      color: statusColor,
-                    ),
-                  ),
+                StatusChip(
+                  status: ticket.status,
+                  label: ticket.localizedStatus(l10n),
+                  textKey: const Key('my_ticket_status_badge'),
                 ),
               ],
             ),
-          ),
+            const SizedBox(height: 18),
 
-          // Ticket number + people ahead
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 20),
-            child: Column(
+            // Bold Boarding-Pass Stub: Massive Ticket Number + Doctor Monogram & People Ahead
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                Text(
-                  '№${ticket.ticketNumber}',
-                  key: const Key('my_ticket_number_text'),
-                  style: const TextStyle(
-                    fontSize: 44,
-                    fontWeight: FontWeight.w900,
-                    color: AppTheme.primary,
-                    letterSpacing: -1.5,
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 18,
+                    vertical: 12,
+                  ),
+                  decoration: BoxDecoration(
+                    color: statusAccent.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(18),
+                    border: Border.all(
+                      color: statusAccent.withValues(alpha: 0.35),
+                    ),
+                  ),
+                  child: Text(
+                    '№${ticket.ticketNumber}',
+                    key: const Key('my_ticket_number_text'),
+                    style: TextStyle(
+                      fontSize: 36,
+                      fontWeight: FontWeight.w900,
+                      color: statusAccent,
+                      letterSpacing: -1.2,
+                      fontFeatures: const [FontFeature.tabularFigures()],
+                    ),
                   ),
                 ),
-                if (!ticket.isSkipped) ...[
-                  const SizedBox(height: 12),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                    decoration: BoxDecoration(
-                      color: AppTheme.primaryLight,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(Icons.people_outline, color: AppTheme.primary, size: 18),
-                        const SizedBox(width: 8),
-                        Text(
-                          l10n.peopleAhead(ticket.peopleAhead),
-                          key: const Key('my_ticket_people_ahead_text'),
-                          style: const TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w700,
-                            color: AppTheme.primary,
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        ticket.doctor.fullName,
+                        key: const Key('my_ticket_doctor_name'),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w800,
+                          color: colors.textPrimary,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        ticket.specialization.name,
+                        key: const Key('my_ticket_specialization_name'),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: colors.teal,
+                        ),
+                      ),
+                      if (!ticket.isSkipped) ...[
+                        const SizedBox(height: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 5,
+                          ),
+                          decoration: BoxDecoration(
+                            color: colors.blueSoft,
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.people_outline, color: colors.blue, size: 15),
+                              const SizedBox(width: 6),
+                              Flexible(
+                                child: Text(
+                                  l10n.peopleAhead(ticket.peopleAhead),
+                                  key: const Key('my_ticket_people_ahead_text'),
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    fontSize: 12.5,
+                                    fontWeight: FontWeight.w700,
+                                    color: colors.blue,
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                       ],
-                    ),
+                    ],
                   ),
-                ],
-              ],
-            ),
-          ),
-
-          const Divider(height: 1, color: AppTheme.cardBorder),
-
-          // Details
-          Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              children: [
-                _buildTicketDetailRow(
-                  icon: Icons.person_outline,
-                  label: l10n.doctorLabel,
-                  value: ticket.doctor.fullName,
-                  valueKey: const Key('my_ticket_doctor_name'),
-                ),
-                const SizedBox(height: 14),
-                _buildTicketDetailRow(
-                  icon: Icons.medical_services_outlined,
-                  label: l10n.specializationLabel,
-                  value: ticket.specialization.name,
-                  valueKey: const Key('my_ticket_specialization_name'),
-                ),
-                if (ticket.doctor.roomNumber != null &&
-                    ticket.doctor.roomNumber!.isNotEmpty) ...[
-                  const SizedBox(height: 14),
-                  _buildTicketDetailRow(
-                    icon: Icons.meeting_room_outlined,
-                    label: l10n.roomLabel,
-                    value: l10n.roomWithNumber(ticket.doctor.roomNumber!),
-                    valueKey: const Key('my_ticket_room_number'),
-                  ),
-                ],
-                if (ticket.queuePosition != null) ...[
-                  const SizedBox(height: 14),
-                  _buildTicketDetailRow(
-                    icon: Icons.format_list_numbered,
-                    label: l10n.queuePositionLabel,
-                    value: '#${ticket.queuePosition}',
-                  ),
-                ],
-                const SizedBox(height: 14),
-                _buildTicketDetailRow(
-                  icon: Icons.access_time_outlined,
-                  label: l10n.ticketTimeLabel,
-                  value: _formatDateTime(ticket.createdAt),
                 ),
               ],
             ),
+          ],
+        ),
+      ),
+      bottomSection: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
+        child: Wrap(
+          spacing: 10,
+          runSpacing: 10,
+          children: [
+            if (ticket.doctor.roomNumber != null &&
+                ticket.doctor.roomNumber!.isNotEmpty)
+              _buildMetaPill(
+                colors: colors,
+                icon: Icons.meeting_room_outlined,
+                label: l10n.roomLabel,
+                value: l10n.roomWithNumber(ticket.doctor.roomNumber!),
+                valueKey: const Key('my_ticket_room_number'),
+              ),
+            if (ticket.queuePosition != null)
+              _buildMetaPill(
+                colors: colors,
+                icon: Icons.format_list_numbered_rounded,
+                label: l10n.queuePositionLabel,
+                value: '#${ticket.queuePosition}',
+              ),
+            _buildMetaPill(
+              colors: colors,
+              icon: Icons.access_time_rounded,
+              label: l10n.ticketTimeLabel,
+              value: _formatDateTime(ticket.createdAt),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMetaPill({
+    required DentalThemeTokens colors,
+    required IconData icon,
+    required String label,
+    required String value,
+    Key? valueKey,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+      decoration: BoxDecoration(
+        color: colors.surfaceMuted,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: colors.border),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 16, color: colors.teal),
+          const SizedBox(width: 8),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 10.5,
+                  fontWeight: FontWeight.w600,
+                  color: colors.textSecondary,
+                ),
+              ),
+              Text(
+                value,
+                key: valueKey,
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: colors.textPrimary,
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -1282,17 +1368,21 @@ class _MyQueueScreenState extends State<MyQueueScreen> with WidgetsBindingObserv
   // Check-in Card
   // ---------------------------------------------------------------------------
 
-  Widget _buildCheckInCard(MyQueueTicket ticket, AppLocalizations l10n) {
+  Widget _buildCheckInCard(
+    MyQueueTicket ticket,
+    AppLocalizations l10n,
+    DentalThemeTokens colors,
+  ) {
     final isCheckedIn = ticket.isCheckedIn;
 
     return Container(
       key: const Key('checkin_card'),
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
+        color: colors.surface,
+        borderRadius: BorderRadius.circular(18),
         border: Border.all(
-          color: isCheckedIn ? AppTheme.success.withValues(alpha: 0.4) : AppTheme.cardBorder,
+          color: isCheckedIn ? colors.success.withValues(alpha: 0.45) : colors.border,
         ),
       ),
       child: Column(
@@ -1301,10 +1391,17 @@ class _MyQueueScreenState extends State<MyQueueScreen> with WidgetsBindingObserv
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(
-                isCheckedIn ? Icons.check_circle : Icons.info_outline,
-                color: isCheckedIn ? AppTheme.success : AppTheme.warning,
-                size: 22,
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: isCheckedIn ? colors.successSoft : colors.warningSoft,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(
+                  isCheckedIn ? Icons.check_circle_rounded : Icons.qr_code_2_rounded,
+                  color: isCheckedIn ? colors.success : colors.warning,
+                  size: 22,
+                ),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -1319,7 +1416,7 @@ class _MyQueueScreenState extends State<MyQueueScreen> with WidgetsBindingObserv
                       style: TextStyle(
                         fontSize: 15,
                         fontWeight: FontWeight.w700,
-                        color: isCheckedIn ? AppTheme.success : AppTheme.textPrimary,
+                        color: isCheckedIn ? colors.success : colors.textPrimary,
                       ),
                     ),
                     const SizedBox(height: 4),
@@ -1327,10 +1424,10 @@ class _MyQueueScreenState extends State<MyQueueScreen> with WidgetsBindingObserv
                       isCheckedIn
                           ? l10n.checkedInStatusDesc
                           : l10n.notCheckedInStatusDesc,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 13,
-                        color: AppTheme.textSecondary,
-                        height: 1.3,
+                        color: colors.textSecondary,
+                        height: 1.35,
                       ),
                     ),
                   ],
@@ -1344,10 +1441,10 @@ class _MyQueueScreenState extends State<MyQueueScreen> with WidgetsBindingObserv
             const SizedBox(height: 14),
             Text(
               l10n.waitingCheckInPrompt,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 13,
-                color: AppTheme.textSecondary,
-                height: 1.3,
+                color: colors.textSecondary,
+                height: 1.35,
               ),
             ),
             const SizedBox(height: 14),
@@ -1361,16 +1458,8 @@ class _MyQueueScreenState extends State<MyQueueScreen> with WidgetsBindingObserv
                         onPressed: _checkingInTicketId == null
                             ? () => _startQrScan(ticket)
                             : null,
-                        icon: const Icon(Icons.qr_code_scanner),
+                        icon: const Icon(Icons.qr_code_scanner_rounded),
                         label: Text(l10n.checkInButtonText),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppTheme.primary,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
                       ),
                     ],
                   ),
@@ -1384,7 +1473,11 @@ class _MyQueueScreenState extends State<MyQueueScreen> with WidgetsBindingObserv
   // Cancel Button
   // ---------------------------------------------------------------------------
 
-  Widget _buildCancelButton(MyQueueTicket ticket, AppLocalizations l10n) {
+  Widget _buildCancelButton(
+    MyQueueTicket ticket,
+    AppLocalizations l10n,
+    DentalThemeTokens colors,
+  ) {
     if (_cancellingTicketId == ticket.id) {
       return const Center(
         child: Padding(
@@ -1399,13 +1492,12 @@ class _MyQueueScreenState extends State<MyQueueScreen> with WidgetsBindingObserv
       onPressed: _cancellingTicketId == null
           ? () => _confirmAndCancelTicket(ticket)
           : null,
-      icon: const Icon(Icons.cancel_outlined, color: AppTheme.error),
+      icon: Icon(Icons.cancel_outlined, color: colors.error),
       label: Text(l10n.cancelTicketButton),
       style: OutlinedButton.styleFrom(
-        foregroundColor: AppTheme.error,
-        side: const BorderSide(color: AppTheme.error),
+        foregroundColor: colors.error,
+        side: BorderSide(color: colors.error.withValues(alpha: 0.7)),
         padding: const EdgeInsets.symmetric(vertical: 14),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ),
     );
   }
@@ -1414,27 +1506,27 @@ class _MyQueueScreenState extends State<MyQueueScreen> with WidgetsBindingObserv
   // Helpers
   // ---------------------------------------------------------------------------
 
-  Widget _buildImportantNotesCard(AppLocalizations l10n) {
+  Widget _buildImportantNotesCard(AppLocalizations l10n, DentalThemeTokens colors) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppTheme.surface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppTheme.cardBorder),
+        color: colors.surface,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: colors.border),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              const Icon(Icons.notifications_active_outlined, size: 18, color: AppTheme.secondary),
+              Icon(Icons.notifications_active_outlined, size: 18, color: colors.blue),
               const SizedBox(width: 8),
               Text(
                 l10n.myQueueReminderTitle,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.w700,
-                  color: AppTheme.textPrimary,
+                  color: colors.textPrimary,
                 ),
               ),
             ],
@@ -1442,9 +1534,9 @@ class _MyQueueScreenState extends State<MyQueueScreen> with WidgetsBindingObserv
           const SizedBox(height: 8),
           Text(
             l10n.myQueueReminderDesc,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 13,
-              color: AppTheme.textSecondary,
+              color: colors.textSecondary,
               height: 1.35,
             ),
           ),
@@ -1453,93 +1545,60 @@ class _MyQueueScreenState extends State<MyQueueScreen> with WidgetsBindingObserv
     );
   }
 
-  Widget _buildTicketDetailRow({
-    required IconData icon,
-    required String label,
-    required String value,
-    Key? valueKey,
-  }) {
-    return Row(
-      children: [
-        Icon(icon, size: 18, color: AppTheme.textSecondary),
-        const SizedBox(width: 10),
-        Expanded(
-          child: Text(
-            label,
-            style: const TextStyle(
-              fontSize: 14,
-              color: AppTheme.textSecondary,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-        ),
-        Text(
-          value,
-          key: valueKey,
-          style: const TextStyle(
-            fontSize: 14,
-            color: AppTheme.textPrimary,
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildFeatureOverviewCard(AppLocalizations l10n) {
+  Widget _buildFeatureOverviewCard(AppLocalizations l10n, DentalThemeTokens colors) {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: AppTheme.surface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppTheme.cardBorder),
+        color: colors.surface,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: colors.border),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              const Icon(Icons.lightbulb_outline, color: AppTheme.secondary, size: 20),
+              Icon(Icons.lightbulb_outline, color: colors.blue, size: 20),
               const SizedBox(width: 8),
               Text(
                 l10n.featuresTitle,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 15,
                   fontWeight: FontWeight.w700,
-                  color: AppTheme.textPrimary,
+                  color: colors.textPrimary,
                 ),
               ),
             ],
           ),
           const SizedBox(height: 12),
-          _buildFeatureBullet(l10n.featureTicketAndSpec),
-          _buildFeatureBullet(l10n.featureLiveQueue),
-          _buildFeatureBullet(l10n.featureCheckIn),
-          _buildFeatureBullet(l10n.featurePushNotifications),
+          _buildFeatureBullet(l10n.featureTicketAndSpec, colors),
+          _buildFeatureBullet(l10n.featureLiveQueue, colors),
+          _buildFeatureBullet(l10n.featureCheckIn, colors),
+          _buildFeatureBullet(l10n.featurePushNotifications, colors),
         ],
       ),
     );
   }
 
-  Widget _buildFeatureBullet(String text) {
+  Widget _buildFeatureBullet(String text, DentalThemeTokens colors) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Padding(
-            padding: EdgeInsets.only(top: 5),
-            child: Icon(Icons.check_circle_outline, size: 14, color: AppTheme.secondary),
+          Padding(
+            padding: const EdgeInsets.only(top: 3),
+            child: Icon(Icons.check_circle_outline, size: 15, color: colors.teal),
           ),
           const SizedBox(width: 10),
           Expanded(
             child: Text(
               text,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 13,
-                color: AppTheme.textSecondary,
-                height: 1.3,
+                color: colors.textSecondary,
+                height: 1.35,
               ),
             ),
           ),
