@@ -1154,6 +1154,65 @@ def update_queue_smart_call_mode(
     return queue
 
 
+def _maybe_auto_advance_queue(
+    db: Session,
+    queue: Queue,
+    doctor: Doctor,
+) -> SmartCallAdvanceResult:
+    """Trigger Smart Call handoff only in active, unpaused AUTOMATIC queues with no active patient."""
+    if (
+        queue.smart_call_mode != SmartCallMode.AUTOMATIC
+        or not queue.is_active
+        or queue.is_paused
+    ):
+        return SmartCallAdvanceResult()
+
+    remaining_active = db.scalar(
+        select(QueueTicket.id)
+        .where(
+            QueueTicket.queue_id == queue.id,
+            QueueTicket.status.in_([TicketStatus.CALLED, TicketStatus.SERVING]),
+        )
+        .limit(1)
+    )
+    if remaining_active is not None:
+        return SmartCallAdvanceResult()
+
+    timeout_seconds = get_clinic_timeout_seconds(db, doctor.clinic_id)
+    return advance_smart_call_for_queue(db, queue.id, timeout_seconds)
+
+
+def _commit_and_build_handoff_response(
+    db: Session,
+    queue: Queue,
+    doctor: Doctor,
+    ticket: QueueTicket,
+    advance_result: SmartCallAdvanceResult,
+    primary_notification_fn,
+    background_tasks: BackgroundTasks = None,
+) -> CompleteTicketResponse:
+    """Commit ticket transition + optional auto-call atomically and schedule notifications."""
+    auto_called_ticket = advance_result.called_ticket
+    db.commit()
+    db.refresh(ticket)
+    if auto_called_ticket is not None:
+        db.refresh(auto_called_ticket)
+
+    notify_display_update(doctor.clinic_id, background_tasks, queue_id=queue.id)
+    if ticket.patient_id is not None:
+        primary_notification_fn(ticket.id, background_tasks)
+    for passed_id in advance_result.passed_ticket_ids:
+        schedule_missed_turn_notification(passed_id, background_tasks)
+    if auto_called_ticket is not None and auto_called_ticket.patient_id is not None:
+        schedule_called_notification(auto_called_ticket.id, doctor.room_number, background_tasks)
+    schedule_approaching_check(queue.id, background_tasks)
+
+    response = CompleteTicketResponse.model_validate(ticket)
+    if auto_called_ticket is not None:
+        response.auto_called_ticket = QueueTicketResponse.model_validate(auto_called_ticket)
+    return response
+
+
 @router.patch(
     "/{queue_id}/tickets/{ticket_id}/complete",
     response_model=CompleteTicketResponse,
@@ -1189,52 +1248,21 @@ def complete_patient(
     # Flush COMPLETED transition before checking active tickets or running Smart Call advance
     db.flush()
 
-    advance_result = SmartCallAdvanceResult()
-    if (
-        queue.smart_call_mode == SmartCallMode.AUTOMATIC
-        and queue.is_active
-        and not queue.is_paused
-    ):
-        remaining_active = db.scalar(
-            select(QueueTicket.id)
-            .where(
-                QueueTicket.queue_id == queue.id,
-                QueueTicket.status.in_([TicketStatus.CALLED, TicketStatus.SERVING]),
-            )
-            .limit(1)
-        )
-        if remaining_active is None:
-            timeout_seconds = get_clinic_timeout_seconds(db, doctor.clinic_id)
-            advance_result = advance_smart_call_for_queue(
-                db,
-                queue.id,
-                timeout_seconds,
-            )
-
-    auto_called_ticket = advance_result.called_ticket
-    db.commit()
-    db.refresh(ticket)
-    if auto_called_ticket is not None:
-        db.refresh(auto_called_ticket)
-
-    notify_display_update(doctor.clinic_id, background_tasks, queue_id=queue.id)
-    if ticket.patient_id is not None:
-        schedule_completed_notification(ticket.id, background_tasks)
-    for passed_id in advance_result.passed_ticket_ids:
-        schedule_missed_turn_notification(passed_id, background_tasks)
-    if auto_called_ticket is not None and auto_called_ticket.patient_id is not None:
-        schedule_called_notification(auto_called_ticket.id, doctor.room_number, background_tasks)
-    schedule_approaching_check(queue.id, background_tasks)
-
-    response = CompleteTicketResponse.model_validate(ticket)
-    if auto_called_ticket is not None:
-        response.auto_called_ticket = QueueTicketResponse.model_validate(auto_called_ticket)
-    return response
+    advance_result = _maybe_auto_advance_queue(db, queue, doctor)
+    return _commit_and_build_handoff_response(
+        db=db,
+        queue=queue,
+        doctor=doctor,
+        ticket=ticket,
+        advance_result=advance_result,
+        primary_notification_fn=schedule_completed_notification,
+        background_tasks=background_tasks,
+    )
 
 
 @router.patch(
     "/{queue_id}/tickets/{ticket_id}/skip",
-    response_model=QueueTicketResponse,
+    response_model=CompleteTicketResponse,
 )
 def skip_patient(
     queue_id: int,
@@ -1242,32 +1270,8 @@ def skip_patient(
     background_tasks: BackgroundTasks = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_roles(UserRole.RECEPTIONIST, UserRole.ADMIN)),
-) -> QueueTicket:
-    queue = db.scalar(select(Queue).where(Queue.id == queue_id).with_for_update())
-    if not queue:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Queue not found",
-        )
-
-    doctor = db.scalar(select(Doctor).where(Doctor.id == queue.doctor_id))
-    if not doctor:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Doctor not found",
-        )
-
-    if current_user.role == UserRole.RECEPTIONIST:
-        if current_user.clinic_id is None:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Receptionist is not assigned to a clinic",
-            )
-        if current_user.clinic_id != doctor.clinic_id:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Cannot access another clinic's queue",
-            )
+) -> CompleteTicketResponse:
+    queue, doctor = _get_locked_queue_and_doctor_for_staff(db, queue_id, current_user)
 
     ticket = db.scalar(
         select(QueueTicket).where(
@@ -1287,15 +1291,27 @@ def skip_patient(
             detail="Only waiting or called tickets can be skipped",
         )
 
+    previous_status = ticket.status
     ticket.status = TicketStatus.SKIPPED
     clear_ticket_call_countdown(ticket)
-    db.commit()
-    db.refresh(ticket)
-    notify_display_update(doctor.clinic_id, background_tasks, queue_id=queue.id)
-    if ticket.patient_id is not None:
-        schedule_skipped_notification(ticket.id, background_tasks)
-    schedule_approaching_check(queue.id, background_tasks)
-    return ticket
+    # Flush SKIPPED transition before checking active tickets or advancing next eligible patient
+    db.flush()
+
+    # Only skipping the currently CALLED ticket triggers automatic Smart Call handoff
+    advance_result = (
+        _maybe_auto_advance_queue(db, queue, doctor)
+        if previous_status == TicketStatus.CALLED
+        else SmartCallAdvanceResult()
+    )
+    return _commit_and_build_handoff_response(
+        db=db,
+        queue=queue,
+        doctor=doctor,
+        ticket=ticket,
+        advance_result=advance_result,
+        primary_notification_fn=schedule_skipped_notification,
+        background_tasks=background_tasks,
+    )
 
 
 @router.patch(
