@@ -138,14 +138,11 @@ class ReceptionCompletedPatientsTest(unittest.TestCase):
         cls.db.close()
 
     def setUp(self):
-        today = date.today()
         for doc in (self.doctor1, self.doctor2):
-            q = self.db.scalar(
-                select(Queue).where(Queue.doctor_id == doc.id, Queue.queue_date == today)
-            )
-            if q:
-                self.db.execute(delete(QueueTicket).where(QueueTicket.queue_id == q.id))
-                self.db.execute(delete(Queue).where(Queue.id == q.id))
+            q_ids = self.db.scalars(select(Queue.id).where(Queue.doctor_id == doc.id)).all()
+            if q_ids:
+                self.db.execute(delete(QueueTicket).where(QueueTicket.queue_id.in_(q_ids)))
+                self.db.execute(delete(Queue).where(Queue.id.in_(q_ids)))
         self.db.commit()
 
     def _open_queue(self, doctor_id: int, headers: dict[str, str]) -> int:

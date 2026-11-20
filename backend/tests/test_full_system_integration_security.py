@@ -180,11 +180,15 @@ class FullSystemIntegrationAndSecurityTest(unittest.TestCase):
         cls.db.close()
 
     def _get_or_create_queue(self, doctor_id: int) -> int:
-        today = date.today()
+        from app.models.queue import ShiftStatus
+        from app.services.shift_service import ACTIVE_SHIFT_STATUSES, get_clinic_local_date
+
+        clinic = self.db.scalar(select(Clinic).where(Clinic.id == self.clinic1.id))
+        today = get_clinic_local_date(clinic)
         q = self.db.scalar(
             select(Queue).where(
                 Queue.doctor_id == doctor_id,
-                Queue.queue_date == today,
+                Queue.shift_status.in_(ACTIVE_SHIFT_STATUSES),
             )
         )
         if not q:
@@ -193,6 +197,7 @@ class FullSystemIntegrationAndSecurityTest(unittest.TestCase):
                 queue_date=today,
                 is_active=True,
                 is_paused=False,
+                shift_status=ShiftStatus.OPEN,
             )
             self.db.add(q)
             self.db.commit()

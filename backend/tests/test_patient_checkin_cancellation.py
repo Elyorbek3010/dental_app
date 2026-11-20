@@ -111,10 +111,16 @@ class PatientCheckInAndCancellationBackendTest(unittest.TestCase):
             cls.db.commit()
             cls.db.refresh(cls.doctor)
 
-        # Active Queue for today
-        today = date.today()
+        # Active shift for doctor
+        from app.models.queue import ShiftStatus
+        from app.services.shift_service import ACTIVE_SHIFT_STATUSES, get_clinic_local_date
+
+        today = get_clinic_local_date(cls.clinic)
         cls.queue = cls.db.scalar(
-            select(Queue).where(Queue.doctor_id == cls.doctor.id, Queue.queue_date == today)
+            select(Queue).where(
+                Queue.doctor_id == cls.doctor.id,
+                Queue.shift_status.in_(ACTIVE_SHIFT_STATUSES),
+            )
         )
         if not cls.queue:
             cls.queue = Queue(
@@ -122,10 +128,15 @@ class PatientCheckInAndCancellationBackendTest(unittest.TestCase):
                 queue_date=today,
                 is_paused=False,
                 is_active=True,
+                shift_status=ShiftStatus.OPEN,
             )
             cls.db.add(cls.queue)
             cls.db.commit()
             cls.db.refresh(cls.queue)
+        elif not cls.queue.is_active or cls.queue.is_paused:
+            cls.queue.is_active = True
+            cls.queue.is_paused = False
+            cls.db.commit()
 
     @classmethod
     def tearDownClass(cls):

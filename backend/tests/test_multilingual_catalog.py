@@ -173,10 +173,24 @@ class MultilingualCatalogBackendTest(unittest.TestCase):
             self.db.commit()
             self.db.refresh(doctor)
 
-        today = date.today()
-        queue = self.db.scalar(select(Queue).where(Queue.doctor_id == doctor.id, Queue.queue_date == today))
+        from app.models.queue import ShiftStatus
+        from app.services.shift_service import ACTIVE_SHIFT_STATUSES, get_clinic_local_date
+
+        today = get_clinic_local_date(self.clinic)
+        queue = self.db.scalar(
+            select(Queue).where(
+                Queue.doctor_id == doctor.id,
+                Queue.shift_status.in_(ACTIVE_SHIFT_STATUSES),
+            )
+        )
         if not queue:
-            queue = Queue(doctor_id=doctor.id, queue_date=today, is_paused=False, is_active=True)
+            queue = Queue(
+                doctor_id=doctor.id,
+                queue_date=today,
+                is_paused=False,
+                is_active=True,
+                shift_status=ShiftStatus.OPEN,
+            )
             self.db.add(queue)
             self.db.commit()
             self.db.refresh(queue)
