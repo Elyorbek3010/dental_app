@@ -135,6 +135,13 @@ class SmartCallModeTest(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
+        with SessionLocal() as db:
+            doctor_ids = [cls.doctor1.id, cls.doctor2.id, cls.doctor_other.id]
+            q_ids = list(db.scalars(select(Queue.id).where(Queue.doctor_id.in_(doctor_ids))).all())
+            if q_ids:
+                db.execute(delete(QueueTicket).where(QueueTicket.queue_id.in_(q_ids)))
+                db.execute(delete(Queue).where(Queue.id.in_(q_ids)))
+            db.commit()
         cls.db.close()
 
     def setUp(self):
@@ -540,6 +547,265 @@ class SmartCallModeTest(unittest.TestCase):
             check=True,
         )
         self.assertIn("a2b3c4d5e6f7", cur.stdout)
+
+    def test_11_automatic_manual_skip_called_advances_next_with_countdown_and_notifications(self):
+        q = self.client.post(
+            "/api/queues/open", json={"doctor_id": self.doctor1.id}, headers=self.rec1_headers
+        ).json()
+        self.client.patch(
+            f"/api/queues/{q['id']}/smart-call-mode",
+            json={"mode": "AUTOMATIC"},
+            headers=self.rec1_headers,
+        )
+        t12 = self._add_ticket(q["id"], 12, patient=self.p1, checked_in=True)
+        t_absent = self._add_ticket(q["id"], 13, patient=self.p2, checked_in=False)
+        t14 = self._add_ticket(q["id"], 14, patient=self.p3, checked_in=True)
+
+        with patch("app.api.queues.schedule_called_notification") as mock_called, patch(
+            "app.api.queues.schedule_skipped_notification"
+        ) as mock_skip, patch("app.api.queues.schedule_missed_turn_notification") as mock_missed, patch(
+            "app.api.queues.schedule_restored_notification"
+        ) as mock_restore, patch("app.api.queues.schedule_approaching_check") as mock_approaching, patch(
+            "app.api.queues.notify_display_update"
+        ) as mock_ws:
+            self.client.post(f"/api/queues/{q['id']}/call-next", headers=self.rec1_headers)
+            mock_called.reset_mock()
+            mock_ws.reset_mock()
+            mock_approaching.reset_mock()
+
+            skip_res = self.client.patch(
+                f"/api/queues/{q['id']}/tickets/{t12.id}/skip",
+                headers=self.rec1_headers,
+            )
+            self.assertEqual(skip_res.status_code, 200)
+            body = skip_res.json()
+            self.assertEqual(body["status"], "SKIPPED")
+            self.assertIsNone(body["call_deadline_at"])
+            self.assertIsNotNone(body["auto_called_ticket"])
+            self.assertEqual(body["auto_called_ticket"]["id"], t14.id)
+            self.assertEqual(body["auto_called_ticket"]["status"], "CALLED")
+            self.assertIsNotNone(body["auto_called_ticket"]["called_at"])
+            self.assertIsNotNone(body["auto_called_ticket"]["call_deadline_at"])
+            called_at = datetime.fromisoformat(body["auto_called_ticket"]["called_at"])
+            deadline = datetime.fromisoformat(body["auto_called_ticket"]["call_deadline_at"])
+            self.assertEqual(round((deadline - called_at).total_seconds()), 60)
+
+            mock_skip.assert_called_once()
+            mock_missed.assert_called_once()
+            mock_called.assert_called_once()
+            mock_ws.assert_called_once()
+            mock_approaching.assert_called_once()
+
+            # Automatic mode stays enabled and Restore keeps existing behavior
+            with SessionLocal() as db:
+                self.assertEqual(
+                    db.scalar(select(Queue.smart_call_mode).where(Queue.id == q["id"])),
+                    SmartCallMode.AUTOMATIC,
+                )
+                self.assertEqual(
+                    db.scalar(select(QueueTicket.missed_turns).where(QueueTicket.id == t_absent.id)),
+                    1,
+                )
+
+            restore_res = self.client.patch(
+                f"/api/queues/{q['id']}/tickets/{t12.id}/restore",
+                headers=self.rec1_headers,
+            )
+            self.assertEqual(restore_res.status_code, 200)
+            self.assertEqual(restore_res.json()["status"], "WAITING")
+            mock_restore.assert_called_once()
+
+    def test_12_manual_mode_skip_called_does_not_call_next(self):
+        q = self.client.post(
+            "/api/queues/open", json={"doctor_id": self.doctor1.id}, headers=self.rec1_headers
+        ).json()
+        self.assertEqual(q["smart_call_mode"], "MANUAL")
+        t1 = self._add_ticket(q["id"], 1, patient=self.p1, checked_in=True)
+        t2 = self._add_ticket(q["id"], 2, patient=self.p2, checked_in=True)
+
+        with patch("app.api.queues.schedule_called_notification") as mock_called, patch(
+            "app.api.queues.schedule_skipped_notification"
+        ) as mock_skip, patch("app.api.queues.schedule_approaching_check"), patch(
+            "app.api.queues.notify_display_update"
+        ):
+            self.client.post(f"/api/queues/{q['id']}/call-next", headers=self.rec1_headers)
+            mock_called.reset_mock()
+
+            skip_res = self.client.patch(
+                f"/api/queues/{q['id']}/tickets/{t1.id}/skip",
+                headers=self.rec1_headers,
+            )
+            self.assertEqual(skip_res.status_code, 200)
+            self.assertEqual(skip_res.json()["status"], "SKIPPED")
+            self.assertIsNone(skip_res.json()["auto_called_ticket"])
+            mock_skip.assert_called_once()
+            mock_called.assert_not_called()
+
+            with SessionLocal() as db:
+                self.assertEqual(
+                    db.scalar(select(QueueTicket.status).where(QueueTicket.id == t2.id)),
+                    TicketStatus.WAITING,
+                )
+
+    def test_13_automatic_skip_no_eligible_patients_remains_idle_with_mode_on(self):
+        q = self.client.post(
+            "/api/queues/open", json={"doctor_id": self.doctor1.id}, headers=self.rec1_headers
+        ).json()
+        self.client.patch(
+            f"/api/queues/{q['id']}/smart-call-mode",
+            json={"mode": "AUTOMATIC"},
+            headers=self.rec1_headers,
+        )
+        t1 = self._add_ticket(q["id"], 1, patient=self.p1, checked_in=True)
+        t2_absent = self._add_ticket(q["id"], 2, patient=self.p2, checked_in=False)
+
+        with patch("app.api.queues.schedule_called_notification") as mock_called, patch(
+            "app.api.queues.schedule_skipped_notification"
+        ), patch("app.api.queues.schedule_missed_turn_notification") as mock_missed, patch(
+            "app.api.queues.schedule_approaching_check"
+        ), patch("app.api.queues.notify_display_update"):
+            self.client.post(f"/api/queues/{q['id']}/call-next", headers=self.rec1_headers)
+            mock_called.reset_mock()
+
+            skip_res = self.client.patch(
+                f"/api/queues/{q['id']}/tickets/{t1.id}/skip",
+                headers=self.rec1_headers,
+            )
+            self.assertEqual(skip_res.status_code, 200)
+            self.assertIsNone(skip_res.json()["auto_called_ticket"])
+            mock_called.assert_not_called()
+            mock_missed.assert_called_once()
+
+            with SessionLocal() as db:
+                self.assertEqual(
+                    db.scalar(select(Queue.smart_call_mode).where(Queue.id == q["id"])),
+                    SmartCallMode.AUTOMATIC,
+                )
+                self.assertEqual(
+                    db.scalar(select(QueueTicket.status).where(QueueTicket.id == t2_absent.id)),
+                    TicketStatus.WAITING,
+                )
+
+    def test_14_automatic_skip_guards_paused_serving_and_waiting_tickets(self):
+        # Sub-case A: paused queue prevents handoff on skip
+        q_paused = self.client.post(
+            "/api/queues/open", json={"doctor_id": self.doctor1.id}, headers=self.rec1_headers
+        ).json()
+        self.client.patch(
+            f"/api/queues/{q_paused['id']}/smart-call-mode",
+            json={"mode": "AUTOMATIC"},
+            headers=self.rec1_headers,
+        )
+        t1 = self._add_ticket(q_paused["id"], 1, patient=self.p1, checked_in=True)
+        t2 = self._add_ticket(q_paused["id"], 2, patient=self.p2, checked_in=True)
+
+        with patch("app.api.queues.schedule_called_notification") as mock_called, patch(
+            "app.api.queues.schedule_paused_notification"
+        ), patch("app.api.queues.schedule_skipped_notification"), patch(
+            "app.api.queues.schedule_approaching_check"
+        ), patch("app.api.queues.notify_display_update"):
+            self.client.post(f"/api/queues/{q_paused['id']}/call-next", headers=self.rec1_headers)
+            self.client.patch(f"/api/queues/{q_paused['id']}/pause", headers=self.rec1_headers)
+            mock_called.reset_mock()
+
+            res_paused = self.client.patch(
+                f"/api/queues/{q_paused['id']}/tickets/{t1.id}/skip",
+                headers=self.rec1_headers,
+            )
+            self.assertEqual(res_paused.status_code, 200)
+            self.assertIsNone(res_paused.json()["auto_called_ticket"])
+            mock_called.assert_not_called()
+
+        # Sub-case B & C: SERVING exists or skipping a WAITING ticket never auto-calls
+        q_srv = self.client.post(
+            "/api/queues/open", json={"doctor_id": self.doctor2.id}, headers=self.rec1_headers
+        ).json()
+        self.client.patch(
+            f"/api/queues/{q_srv['id']}/smart-call-mode",
+            json={"mode": "AUTOMATIC"},
+            headers=self.rec1_headers,
+        )
+        t_srv = self._add_ticket(q_srv["id"], 1, status=TicketStatus.SERVING, checked_in=True)
+        t_wait1 = self._add_ticket(q_srv["id"], 2, patient=self.p3, checked_in=True)
+        t_wait2 = self._add_ticket(q_srv["id"], 3, checked_in=True)
+
+        with patch("app.api.queues.schedule_called_notification") as mock_called, patch(
+            "app.api.queues.schedule_skipped_notification"
+        ), patch("app.api.queues.schedule_approaching_check"), patch(
+            "app.api.queues.notify_display_update"
+        ):
+            res_wait = self.client.patch(
+                f"/api/queues/{q_srv['id']}/tickets/{t_wait1.id}/skip",
+                headers=self.rec1_headers,
+            )
+            self.assertEqual(res_wait.status_code, 200)
+            self.assertIsNone(res_wait.json()["auto_called_ticket"])
+            mock_called.assert_not_called()
+            with SessionLocal() as db:
+                self.assertEqual(
+                    db.scalar(select(QueueTicket.status).where(QueueTicket.id == t_srv.id)),
+                    TicketStatus.SERVING,
+                )
+                self.assertEqual(
+                    db.scalar(select(QueueTicket.status).where(QueueTicket.id == t_wait2.id)),
+                    TicketStatus.WAITING,
+                )
+
+    def test_15_concurrency_manual_skip_race_never_double_calls(self):
+        q = self.client.post(
+            "/api/queues/open", json={"doctor_id": self.doctor1.id}, headers=self.rec1_headers
+        ).json()
+        self.client.patch(
+            f"/api/queues/{q['id']}/smart-call-mode",
+            json={"mode": "AUTOMATIC"},
+            headers=self.rec1_headers,
+        )
+        t1 = self._add_ticket(q["id"], 1, patient=self.p1, status=TicketStatus.CALLED, checked_in=True)
+        t2 = self._add_ticket(q["id"], 2, patient=self.p2, checked_in=True)
+        t3 = self._add_ticket(q["id"], 3, patient=self.p3, checked_in=True)
+
+        codes: list[int] = []
+        barrier = threading.Barrier(2)
+
+        def do_skip():
+            barrier.wait()
+            with patch("app.api.queues.schedule_skipped_notification"), patch(
+                "app.api.queues.schedule_called_notification"
+            ), patch("app.api.queues.schedule_approaching_check"), patch(
+                "app.api.queues.notify_display_update"
+            ):
+                r = self.client.patch(
+                    f"/api/queues/{q['id']}/tickets/{t1.id}/skip", headers=self.rec1_headers
+                )
+                codes.append(r.status_code)
+
+        def do_call_next():
+            barrier.wait()
+            with patch("app.api.queues.schedule_called_notification"), patch(
+                "app.api.queues.schedule_approaching_check"
+            ), patch("app.api.queues.notify_display_update"):
+                r = self.client.post(f"/api/queues/{q['id']}/call-next", headers=self.rec1_headers)
+                codes.append(r.status_code)
+
+        ta = threading.Thread(target=do_skip)
+        tb = threading.Thread(target=do_call_next)
+        ta.start()
+        tb.start()
+        ta.join()
+        tb.join()
+
+        self.assertIn(200, codes)
+        with SessionLocal() as db:
+            called_rows = list(
+                db.scalars(
+                    select(QueueTicket).where(
+                        QueueTicket.queue_id == q["id"],
+                        QueueTicket.status == TicketStatus.CALLED,
+                    )
+                ).all()
+            )
+            self.assertEqual(len(called_rows), 1)
+            self.assertIn(called_rows[0].id, {t2.id, t3.id})
 
 
 if __name__ == "__main__":
