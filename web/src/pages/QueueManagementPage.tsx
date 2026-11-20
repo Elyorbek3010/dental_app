@@ -34,6 +34,7 @@ import {
   skipPatient,
 } from '../api/reception';
 import { useI18n } from '../i18n/useI18n';
+import { formatCountdownMmSs, useSmartCallCountdown } from '../hooks/useSmartCallCountdown';
 import type { QueueTicket, ReceptionQueueOverview } from '../types/reception';
 import { StatusBadge } from '../components/common/StatusBadge';
 import { ConfirmModal } from '../components/common/ConfirmModal';
@@ -51,6 +52,7 @@ export const QueueManagementPage: React.FC = () => {
   });
 
   const [tickets, setTickets] = useState<QueueTicket[]>([]);
+  const [ticketsFetchedAtMs, setTicketsFetchedAtMs] = useState<number | null>(null);
   const [isLoadingQueues, setIsLoadingQueues] = useState<boolean>(true);
   const [isLoadingTickets, setIsLoadingTickets] = useState<boolean>(false);
   const [actionInProgress, setActionInProgress] = useState<string | null>(null);
@@ -71,6 +73,16 @@ export const QueueManagementPage: React.FC = () => {
     title: '',
     message: '',
     onConfirm: async () => {},
+  });
+
+  const currentActiveQueue = todayQueues.find((q) => q.queue_id === selectedQueueId);
+  const currentCalledTicket = tickets.find((tk) => tk.status === 'CALLED');
+  const remainingSeconds = useSmartCallCountdown({
+    callDeadlineAt: currentCalledTicket?.call_deadline_at,
+    pausedRemainingSeconds: currentCalledTicket?.paused_remaining_seconds,
+    serverTime: currentCalledTicket?.server_time,
+    fetchedAtMs: ticketsFetchedAtMs,
+    isPaused: currentActiveQueue?.is_paused ?? false,
   });
 
   // Decode backend error messages into friendly localized messages
@@ -116,6 +128,7 @@ export const QueueManagementPage: React.FC = () => {
     try {
       const ticketList = await fetchQueueTickets(queueId);
       setTickets(ticketList);
+      setTicketsFetchedAtMs(Date.now());
     } catch (err) {
       setNotice({ type: 'error', message: parseBackendError(err) });
     } finally {
@@ -145,6 +158,7 @@ export const QueueManagementPage: React.FC = () => {
           const ticketList = await fetchQueueTickets(activeId);
           if (isCancelled) return;
           setTickets(ticketList);
+          setTicketsFetchedAtMs(Date.now());
         }
       } catch (err) {
         if (!isCancelled) {
@@ -374,7 +388,7 @@ export const QueueManagementPage: React.FC = () => {
       } else {
         await pauseQueue(activeQueue.queue_id);
       }
-      await loadQueuesList();
+      await Promise.all([loadQueuesList(), loadTickets(activeQueue.queue_id, true)]);
     } catch (err) {
       setNotice({ type: 'error', message: parseBackendError(err) });
     } finally {
@@ -597,7 +611,30 @@ export const QueueManagementPage: React.FC = () => {
                 {t.currentlyCalled}
               </span>
             </div>
-            {calledTicket && <StatusBadge status="CALLED" size="sm" />}
+            {calledTicket && (
+              <div className="flex items-center gap-2">
+                {remainingSeconds !== null && (
+                  <span
+                    className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-mono font-bold tabular-nums border ${
+                      activeQueue?.is_paused
+                        ? 'border-amber-300 bg-amber-100/80 text-amber-800 dark:border-amber-800 dark:bg-amber-950/60 dark:text-amber-300'
+                        : remainingSeconds <= 15
+                          ? 'border-rose-300 bg-rose-50 text-rose-700 dark:border-rose-800 dark:bg-rose-950/50 dark:text-rose-300'
+                          : 'border-amber-300 bg-white text-amber-700 dark:border-amber-800 dark:bg-zinc-800 dark:text-amber-300'
+                    }`}
+                  >
+                    <Clock className="h-3.5 w-3.5" />
+                    <span>{formatCountdownMmSs(remainingSeconds)}</span>
+                    {activeQueue?.is_paused && (
+                      <span className="font-sans text-[10px] uppercase tracking-wider">
+                        ({t.pausedCountdownBadge})
+                      </span>
+                    )}
+                  </span>
+                )}
+                <StatusBadge status="CALLED" size="sm" />
+              </div>
+            )}
           </div>
 
           {calledTicket ? (
@@ -626,46 +663,53 @@ export const QueueManagementPage: React.FC = () => {
               </div>
 
               {/* CALLED Actions */}
-              <div className="mt-6 flex flex-wrap items-center gap-2 pt-3 border-t border-amber-200/50 dark:border-amber-900/30">
-                <button
-                  type="button"
-                  onClick={() => handleServe(calledTicket)}
-                  disabled={actionInProgress !== null}
-                  className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-3.5 py-1.5 text-xs font-bold text-white shadow-xs hover:bg-emerald-700 disabled:opacity-50 transition-colors cursor-pointer"
-                >
-                  <UserCheck className="h-3.5 w-3.5" />
-                  {t.servePatient}
-                </button>
+              <div className="mt-6 pt-3 border-t border-amber-200/50 dark:border-amber-900/30 space-y-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleServe(calledTicket)}
+                    disabled={actionInProgress !== null}
+                    className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-3.5 py-1.5 text-xs font-bold text-white shadow-xs hover:bg-emerald-700 disabled:opacity-50 transition-colors cursor-pointer"
+                  >
+                    <UserCheck className="h-3.5 w-3.5" />
+                    {t.servePatient}
+                  </button>
 
-                <button
-                  type="button"
-                  onClick={() => handleManualCall(calledTicket)}
-                  disabled={actionInProgress !== null}
-                  className="inline-flex items-center gap-1.5 rounded-xl border border-amber-300 bg-white px-3 py-1.5 text-xs font-semibold text-amber-800 hover:bg-amber-50 dark:border-amber-800 dark:bg-zinc-800 dark:text-amber-300 disabled:opacity-50 transition-colors"
-                >
-                  <BellRing className="h-3.5 w-3.5" />
-                  {t.callAgain}
-                </button>
+                  <button
+                    type="button"
+                    onClick={() => handleManualCall(calledTicket)}
+                    disabled={actionInProgress !== null || calledTicket.status === 'CALLED'}
+                    title={t.callAgainDisabledHint}
+                    className="inline-flex items-center gap-1.5 rounded-xl border border-amber-300 bg-white px-3 py-1.5 text-xs font-semibold text-amber-800 hover:bg-amber-50 dark:border-amber-800 dark:bg-zinc-800 dark:text-amber-300 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  >
+                    <BellRing className="h-3.5 w-3.5" />
+                    {t.callAgain}
+                  </button>
 
-                <button
-                  type="button"
-                  onClick={() => handleSkipPrompt(calledTicket)}
-                  disabled={actionInProgress !== null}
-                  className="inline-flex items-center gap-1.5 rounded-xl border border-zinc-200 bg-white px-3 py-1.5 text-xs font-semibold text-zinc-600 hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 disabled:opacity-50 transition-colors"
-                >
-                  <FastForward className="h-3.5 w-3.5" />
-                  {t.skipPatient}
-                </button>
+                  <button
+                    type="button"
+                    onClick={() => handleSkipPrompt(calledTicket)}
+                    disabled={actionInProgress !== null}
+                    className="inline-flex items-center gap-1.5 rounded-xl border border-zinc-200 bg-white px-3 py-1.5 text-xs font-semibold text-zinc-600 hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 disabled:opacity-50 transition-colors"
+                  >
+                    <FastForward className="h-3.5 w-3.5" />
+                    {t.skipPatient}
+                  </button>
 
-                <button
-                  type="button"
-                  onClick={() => handleCancelPrompt(calledTicket)}
-                  disabled={actionInProgress !== null}
-                  className="inline-flex items-center gap-1.5 rounded-xl border border-rose-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-rose-600 hover:bg-rose-50 dark:border-rose-900/60 dark:bg-zinc-800 dark:text-rose-400 disabled:opacity-50 transition-colors"
-                >
-                  <XCircle className="h-3.5 w-3.5" />
-                  {t.cancelTicket}
-                </button>
+                  <button
+                    type="button"
+                    onClick={() => handleCancelPrompt(calledTicket)}
+                    disabled={actionInProgress !== null}
+                    className="inline-flex items-center gap-1.5 rounded-xl border border-rose-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-rose-600 hover:bg-rose-50 dark:border-rose-900/60 dark:bg-zinc-800 dark:text-rose-400 disabled:opacity-50 transition-colors"
+                  >
+                    <XCircle className="h-3.5 w-3.5" />
+                    {t.cancelTicket}
+                  </button>
+                </div>
+
+                <p className="text-[11px] font-medium text-amber-800/80 dark:text-amber-300/80">
+                  {t.callAgainDisabledHint}
+                </p>
               </div>
             </div>
           ) : (
@@ -884,13 +928,19 @@ export const QueueManagementPage: React.FC = () => {
                           {/* Manual Call */}
                           <button
                             type="button"
-                            title={t.smartCall}
+                            title={t.manualCall}
                             onClick={() => handleManualCall(ticket)}
-                            disabled={isBusy || actionInProgress !== null || !!calledTicket || !!servingTicket}
-                            className="inline-flex items-center gap-1 rounded-lg bg-indigo-50 px-2.5 py-1 text-xs font-bold text-indigo-700 hover:bg-indigo-100 disabled:opacity-40 transition-colors"
+                            disabled={
+                              isBusy ||
+                              actionInProgress !== null ||
+                              activeQueue?.is_paused ||
+                              !!calledTicket ||
+                              !!servingTicket
+                            }
+                            className="inline-flex items-center gap-1 rounded-lg bg-indigo-50 px-2.5 py-1 text-xs font-bold text-indigo-700 hover:bg-indigo-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                           >
                             <BellRing className="h-3.5 w-3.5" />
-                            <span>{t.smartCall}</span>
+                            <span>{t.manualCall}</span>
                           </button>
 
                           {/* Manual Check-in (if online and not yet checked in) */}

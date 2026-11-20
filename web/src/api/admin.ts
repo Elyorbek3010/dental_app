@@ -18,10 +18,17 @@ export async function getAdminClinicApi(): Promise<AdminClinic> {
   return apiClient<AdminClinic>('/api/admin/clinic');
 }
 
-export async function updateAdminClinicApi(name: string): Promise<AdminClinic> {
+export async function updateAdminClinicApi(
+  name: string,
+  smartCallTimeoutSeconds?: number
+): Promise<AdminClinic> {
+  const payload: { name: string; smart_call_timeout_seconds?: number } = { name };
+  if (smartCallTimeoutSeconds !== undefined) {
+    payload.smart_call_timeout_seconds = smartCallTimeoutSeconds;
+  }
   return apiClient<AdminClinic>('/api/admin/clinic', {
     method: 'PATCH',
-    body: JSON.stringify({ name }),
+    body: JSON.stringify(payload),
   });
 }
 

@@ -28,6 +28,7 @@ export const AdminLayout: React.FC = () => {
   const [showLangMenu, setShowLangMenu] = useState(false);
   const [showClinicModal, setShowClinicModal] = useState(false);
   const [editClinicName, setEditClinicName] = useState('');
+  const [editTimeoutSeconds, setEditTimeoutSeconds] = useState('120');
   const [isSavingClinic, setIsSavingClinic] = useState(false);
   const [clinicError, setClinicError] = useState<string | null>(null);
 
@@ -67,6 +68,7 @@ export const AdminLayout: React.FC = () => {
       .then((data) => {
         setClinic(data);
         setEditClinicName(data.name);
+        setEditTimeoutSeconds(String(data.smart_call_timeout_seconds ?? 120));
       })
       .catch(() => {
         // Fallback if clinic not assigned yet
@@ -81,11 +83,21 @@ export const AdminLayout: React.FC = () => {
   const handleSaveClinic = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editClinicName.trim()) return;
+    const parsedTimeout = Number(editTimeoutSeconds);
+    if (
+      !Number.isInteger(parsedTimeout) ||
+      parsedTimeout < 15 ||
+      parsedTimeout > 1800
+    ) {
+      setClinicError(t.adminSmartCallTimeoutInvalid);
+      return;
+    }
     setIsSavingClinic(true);
     setClinicError(null);
     try {
-      const updated = await updateAdminClinicApi(editClinicName.trim());
+      const updated = await updateAdminClinicApi(editClinicName.trim(), parsedTimeout);
       setClinic(updated);
+      setEditTimeoutSeconds(String(updated.smart_call_timeout_seconds));
       setShowClinicModal(false);
     } catch (err: unknown) {
       if (err instanceof Error) {
@@ -210,6 +222,8 @@ export const AdminLayout: React.FC = () => {
               type="button"
               onClick={() => {
                 setEditClinicName(clinic?.name || '');
+                setEditTimeoutSeconds(String(clinic?.smart_call_timeout_seconds ?? 120));
+                setClinicError(null);
                 setShowClinicModal(true);
               }}
               className="flex items-center gap-2 px-3 py-1.5 rounded-xl border border-zinc-200 bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-800/60 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors text-xs font-medium text-zinc-700 dark:text-zinc-300 cursor-pointer"
@@ -311,6 +325,29 @@ export const AdminLayout: React.FC = () => {
                   onChange={(e) => setEditClinicName(e.target.value)}
                   className="mt-1 block w-full rounded-xl border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 shadow-2xs focus:border-purple-500 focus:outline-hidden dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
                 />
+              </div>
+
+              <div>
+                <label
+                  htmlFor="smart-call-timeout-input"
+                  className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300"
+                >
+                  {t.adminSmartCallTimeoutLabel}
+                </label>
+                <input
+                  id="smart-call-timeout-input"
+                  type="number"
+                  min={15}
+                  max={1800}
+                  step={1}
+                  required
+                  value={editTimeoutSeconds}
+                  onChange={(e) => setEditTimeoutSeconds(e.target.value)}
+                  className="mt-1 block w-full rounded-xl border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 shadow-2xs focus:border-purple-500 focus:outline-hidden dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
+                />
+                <p className="mt-1 text-[11px] text-zinc-500 dark:text-zinc-400">
+                  {t.adminSmartCallTimeoutHelp}
+                </p>
               </div>
 
               <div className="flex justify-end gap-3 pt-2">

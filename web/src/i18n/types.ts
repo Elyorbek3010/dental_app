@@ -93,8 +93,10 @@ export interface TranslationDictionary {
   inactivePatients: string;
   smartCall: string;
   smartCalling: string;
+  manualCall: string;
   addWalkIn: string;
   callAgain: string;
+  callAgainDisabledHint: string;
   servePatient: string;
   completePatient: string;
   skipPatient: string;
@@ -167,7 +169,12 @@ export interface TranslationDictionary {
   adminNavAnalytics: string;
   adminClinicSettings: string;
   adminClinicName: string;
+  adminSmartCallTimeoutLabel: string;
+  adminSmartCallTimeoutHelp: string;
+  adminSmartCallTimeoutInvalid: string;
   adminClinicUpdateSuccess: string;
+  remainingTimeLabel: string;
+  pausedCountdownBadge: string;
   adminEditClinic: string;
   adminSave: string;
   adminSaving: string;

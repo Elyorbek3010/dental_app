@@ -672,4 +672,10 @@ class AppLocalizationsRu extends AppLocalizations {
   @override
   String get fgNotifMissedTurn =>
       'Ваша очередь прошла, талон перемещен в конец очереди.';
+
+  @override
+  String get remainingTimeLabel => 'Осталось времени';
+
+  @override
+  String get pausedCountdownBadge => 'Пауза';
 }

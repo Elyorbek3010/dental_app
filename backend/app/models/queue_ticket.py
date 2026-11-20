@@ -1,7 +1,7 @@
 from datetime import datetime
 from enum import Enum
 
-from sqlalchemy import CheckConstraint, DateTime, Enum as SAEnum, ForeignKey, Integer, String, UniqueConstraint, func, text
+from sqlalchemy import CheckConstraint, DateTime, Enum as SAEnum, ForeignKey, Index, Integer, String, UniqueConstraint, func, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -33,6 +33,11 @@ class QueueTicket(Base):
         UniqueConstraint("queue_id", "ticket_number", name="uq_queue_ticket_number"),
         UniqueConstraint("queue_id", "queue_position", name="uq_queue_ticket_position"),
         CheckConstraint("missed_turns >= 0", name="ck_queue_ticket_missed_turns_non_negative"),
+        CheckConstraint(
+            "paused_remaining_seconds IS NULL OR paused_remaining_seconds >= 0",
+            name="ck_queue_ticket_paused_remaining_non_negative",
+        ),
+        Index("ix_queue_tickets_status_deadline", "status", "call_deadline_at"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -105,6 +110,24 @@ class QueueTicket(Base):
 
     approaching_notified_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),
+        nullable=True,
+        default=None,
+    )
+
+    called_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+        default=None,
+    )
+
+    call_deadline_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+        default=None,
+    )
+
+    paused_remaining_seconds: Mapped[int | None] = mapped_column(
+        Integer,
         nullable=True,
         default=None,
     )

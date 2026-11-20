@@ -1,3 +1,6 @@
+import asyncio
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from sqlalchemy import text
 
@@ -8,12 +11,30 @@ from app.api.notifications import router as notifications_router
 from app.api.public import router as public_router
 from app.api.queues import router as queues_router
 from app.db.session import engine
+from app.services.smart_call_timer import run_smart_call_timer_loop
 
 from fastapi.middleware.cors import CORSMiddleware
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    stop_event = asyncio.Event()
+    timer_task = asyncio.create_task(run_smart_call_timer_loop(stop_event))
+    try:
+        yield
+    finally:
+        stop_event.set()
+        timer_task.cancel()
+        try:
+            await timer_task
+        except asyncio.CancelledError:
+            pass
+
 
 app = FastAPI(
     title="Dental Queue API",
     version="1.0.0",
+    lifespan=lifespan,
 )
 
 app.add_middleware(

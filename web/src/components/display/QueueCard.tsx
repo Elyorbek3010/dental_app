@@ -1,13 +1,27 @@
 import React from 'react';
-import { AlertCircle, DoorOpen, UserCheck, Users } from 'lucide-react';
+import { AlertCircle, Clock, DoorOpen, UserCheck, Users } from 'lucide-react';
+import { formatCountdownMmSs, useSmartCallCountdown } from '../../hooks/useSmartCallCountdown';
 import type { PublicDisplayQueue } from '../../types/display';
 
 interface QueueCardProps {
   queue: PublicDisplayQueue;
+  serverTime?: string | null;
+  fetchedAtMs?: number | null;
 }
 
-export const QueueCard: React.FC<QueueCardProps> = ({ queue }) => {
+export const QueueCard: React.FC<QueueCardProps> = ({
+  queue,
+  serverTime,
+  fetchedAtMs,
+}) => {
   const { doctor, specialization, is_paused, called_ticket, waiting_tickets } = queue;
+  const remainingSeconds = useSmartCallCountdown({
+    callDeadlineAt: called_ticket?.call_deadline_at,
+    pausedRemainingSeconds: called_ticket?.paused_remaining_seconds,
+    serverTime,
+    fetchedAtMs,
+    isPaused: is_paused,
+  });
 
   return (
     <article className="flex flex-col bg-slate-900/90 rounded-2xl border border-slate-800 shadow-2xl overflow-hidden transition-all duration-300">
@@ -50,6 +64,28 @@ export const QueueCard: React.FC<QueueCardProps> = ({ queue }) => {
             <div className="text-6xl md:text-7xl lg:text-8xl font-black font-mono tracking-tighter text-emerald-400 drop-shadow-[0_0_25px_rgba(52,211,153,0.3)] animate-pulse">
               №{called_ticket.ticket_number}
             </div>
+            {remainingSeconds !== null && (
+              <div
+                className={`mt-3 inline-flex items-center gap-2 px-4 py-1.5 rounded-full border font-mono font-bold text-base md:text-lg tabular-nums ${
+                  is_paused
+                    ? 'bg-amber-500/15 border-amber-400/40 text-amber-300'
+                    : remainingSeconds <= 15
+                      ? 'bg-rose-500/15 border-rose-400/40 text-rose-300'
+                      : 'bg-slate-800/80 border-slate-700 text-cyan-300'
+                }`}
+              >
+                <Clock className="w-4 h-4 shrink-0" />
+                <span className="font-sans text-xs md:text-sm uppercase tracking-wider text-slate-300">
+                  Remaining Time:
+                </span>
+                <span>{formatCountdownMmSs(remainingSeconds)}</span>
+                {is_paused && (
+                  <span className="font-sans text-xs uppercase tracking-wider text-amber-300">
+                    (Paused)
+                  </span>
+                )}
+              </div>
+            )}
             {doctor.room_number && (
               <div className="mt-3 inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 font-bold text-base md:text-lg tracking-wider uppercase">
                 <DoorOpen className="w-5 h-5 text-emerald-400" />

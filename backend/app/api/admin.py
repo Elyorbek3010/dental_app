@@ -77,7 +77,18 @@ def update_clinic_info(
             detail="Clinic not found",
         )
 
-    clinic.name = payload.name.strip()
+    if payload.name is not None:
+        stripped_name = payload.name.strip()
+        if not stripped_name:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Clinic name cannot be blank",
+            )
+        clinic.name = stripped_name
+
+    if payload.smart_call_timeout_seconds is not None:
+        clinic.smart_call_timeout_seconds = payload.smart_call_timeout_seconds
+
     db.commit()
     db.refresh(clinic)
     return clinic

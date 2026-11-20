@@ -88,10 +88,12 @@ class AdminClinicResponse(BaseModel):
 
     id: int
     name: str
+    smart_call_timeout_seconds: int
 
 
 class AdminClinicUpdate(BaseModel):
-    name: str = Field(..., min_length=1, max_length=255)
+    name: str | None = Field(default=None, min_length=1, max_length=255)
+    smart_call_timeout_seconds: int | None = Field(default=None, ge=15, le=1800)
 
 
 # --- Analytics Schemas ---

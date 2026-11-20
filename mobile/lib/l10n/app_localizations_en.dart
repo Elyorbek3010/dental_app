@@ -667,4 +667,10 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get fgNotifMissedTurn =>
       'You missed your turn and your ticket was moved to the end.';
+
+  @override
+  String get remainingTimeLabel => 'Remaining time';
+
+  @override
+  String get pausedCountdownBadge => 'Paused';
 }

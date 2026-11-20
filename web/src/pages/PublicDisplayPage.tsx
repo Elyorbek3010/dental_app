@@ -9,7 +9,7 @@ import { usePublicDisplay } from '../hooks/usePublicDisplay';
 
 export const PublicDisplayPage: React.FC = () => {
   const { clinicId } = useParams<{ clinicId: string }>();
-  const { data, loading, error, refetch } = usePublicDisplay(clinicId);
+  const { data, loading, error, lastUpdated, refetch } = usePublicDisplay(clinicId);
 
   if (loading && !data) {
     return (
@@ -63,7 +63,12 @@ export const PublicDisplayPage: React.FC = () => {
         ) : (
           <div className={`grid ${getGridClasses(queues.length)} gap-6 w-full items-stretch`}>
             {queues.map((q) => (
-              <QueueCard key={q.doctor.id} queue={q} />
+              <QueueCard
+                key={q.doctor.id}
+                queue={q}
+                serverTime={data.server_time}
+                fetchedAtMs={lastUpdated ? lastUpdated.getTime() : null}
+              />
             ))}
           </div>
         )}
