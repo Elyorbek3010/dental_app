@@ -307,10 +307,13 @@ export const DashboardOverviewPage: React.FC = () => {
                         </p>
                       </div>
                       {queue ? (
-                        <StatusBadge
-                          status={queue.is_paused ? 'PAUSED' : 'ACTIVE'}
-                          size="sm"
-                        />
+                        <div className="flex flex-wrap items-center justify-end gap-1">
+                          <StatusBadge
+                            status={queue.shift_status === 'CLOSING' ? 'CLOSING' : 'OPEN'}
+                            size="sm"
+                          />
+                          {queue.is_paused && <StatusBadge status="PAUSED" size="sm" />}
+                        </div>
                       ) : (
                         <StatusBadge status="NOT_OPEN" size="sm" />
                       )}
@@ -357,7 +360,7 @@ export const DashboardOverviewPage: React.FC = () => {
                         icon={<PlusCircle className="h-3.5 w-3.5" />}
                         onClick={() => handleOpenQueue(doctor)}
                       >
-                        {isOpening ? t.openingQueue : t.openQueue}
+                        {isOpening ? t.openingQueue : t.startShift}
                       </AppButton>
                     )}
                   </div>

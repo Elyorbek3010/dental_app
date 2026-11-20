@@ -175,7 +175,13 @@ export const TodayQueuesPage: React.FC = () => {
                       {q.specialization.name}
                     </p>
                   </div>
-                  <StatusBadge status={q.is_paused ? 'PAUSED' : 'ACTIVE'} size="sm" />
+                  <div className="flex flex-wrap items-center justify-end gap-1">
+                    <StatusBadge
+                      status={q.shift_status === 'CLOSING' ? 'CLOSING' : 'OPEN'}
+                      size="sm"
+                    />
+                    {q.is_paused && <StatusBadge status="PAUSED" size="sm" />}
+                  </div>
                 </div>
 
                 <div className="mt-3 flex items-center gap-2">

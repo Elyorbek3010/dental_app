@@ -21,3 +21,9 @@ class Clinic(Base):
         default=120,
         server_default=text("120"),
     )
+    timezone: Mapped[str] = mapped_column(
+        String(64),
+        nullable=False,
+        default="Asia/Tashkent",
+        server_default="Asia/Tashkent",
+    )

@@ -2,6 +2,7 @@ export interface AdminClinic {
   id: number;
   name: string;
   smart_call_timeout_seconds: number;
+  timezone?: string;
 }
 
 export interface AdminSpecialization {
@@ -102,4 +103,74 @@ export interface AdminAnalyticsOverview {
   today_tickets_skipped: number;
   today_tickets_cancelled: number;
   doctors_today: DoctorQueueSummary[];
+}
+
+export type ReportingPeriod = 'today' | 'week' | 'month' | 'year' | 'custom' | 'all';
+
+export interface DoctorPerformanceSummary {
+  completed_today: number;
+  completed_this_week: number;
+  completed_this_month: number;
+  completed_this_year: number;
+  completed_all_time: number;
+  completed_in_selected_range: number;
+  legacy_unattributed_completed_count: number;
+  total_shifts: number;
+  active_shifts: number;
+  finished_shifts: number;
+}
+
+export interface DoctorPerformanceItem {
+  doctor_id: number;
+  doctor_name: string;
+  specialization_id?: number | null;
+  specialization_name: string;
+  room_number: string | null;
+  is_active: boolean;
+  current_shift_status: string;
+  completed_today: number;
+  completed_this_week: number;
+  completed_this_month: number;
+  completed_this_year: number;
+  completed_all_time: number;
+  completed_in_selected_range: number;
+  legacy_unattributed_completed_count: number;
+  shifts_count: number;
+  avg_shift_duration_minutes: number | null;
+}
+
+export interface DoctorShiftHistoryItem {
+  queue_id: number;
+  doctor_id: number;
+  doctor_name: string;
+  specialization_id?: number | null;
+  specialization_name: string;
+  room_number: string | null;
+  queue_date: string;
+  shift_status: 'OPEN' | 'CLOSING' | 'FINISHED';
+  is_paused: boolean;
+  smart_call_mode: 'MANUAL' | 'AUTOMATIC';
+  started_at: string | null;
+  ended_at: string | null;
+  duration_seconds: number | null;
+  total_tickets: number;
+  completed_count: number;
+  waiting_count: number;
+  called_count: number;
+  serving_count: number;
+  skipped_count: number;
+  cancelled_count: number;
+}
+
+export interface AdminDoctorPerformanceResponse {
+  clinic_id: number;
+  clinic_name: string;
+  clinic_timezone: string;
+  period: ReportingPeriod;
+  date_from: string | null;
+  date_to: string | null;
+  generated_at: string;
+  summary: DoctorPerformanceSummary;
+  doctors: DoctorPerformanceItem[];
+  shifts: DoctorShiftHistoryItem[];
 }

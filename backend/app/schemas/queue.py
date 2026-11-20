@@ -2,7 +2,7 @@ from datetime import date, datetime, timezone
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.models.queue import SmartCallMode
+from app.models.queue import ShiftStatus, SmartCallMode
 from app.models.queue_ticket import CheckInMethod, TicketSource, TicketStatus
 
 
@@ -30,6 +30,9 @@ class QueueResponse(BaseModel):
     is_paused: bool
     is_active: bool
     smart_call_mode: SmartCallMode = SmartCallMode.MANUAL
+    shift_status: ShiftStatus = ShiftStatus.OPEN
+    started_at: datetime | None = None
+    ended_at: datetime | None = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -45,6 +48,8 @@ class DoctorQueuePreviewResponse(BaseModel):
     queue_date: date
     is_paused: bool
     is_active: bool
+    shift_status: ShiftStatus = ShiftStatus.OPEN
+    started_at: datetime | None = None
     waiting_count: int
     called_count: int
     serving_count: int
@@ -70,6 +75,7 @@ class QueueTicketResponse(BaseModel):
     called_at: datetime | None = None
     call_deadline_at: datetime | None = None
     paused_remaining_seconds: int | None = None
+    completed_at: datetime | None = None
     server_time: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
     model_config = ConfigDict(from_attributes=True)
@@ -145,12 +151,17 @@ class ReceptionQueueOverviewResponse(BaseModel):
     is_paused: bool
     is_active: bool
     smart_call_mode: SmartCallMode = SmartCallMode.MANUAL
+    shift_status: ShiftStatus = ShiftStatus.OPEN
+    started_at: datetime | None = None
+    ended_at: datetime | None = None
     doctor: ReceptionQueueDoctorResponse
     specialization: ReceptionQueueSpecializationResponse
     waiting_count: int
     called_count: int
     serving_count: int
     completed_count: int = 0
+    skipped_count: int = 0
+    cancelled_count: int = 0
 
     model_config = ConfigDict(from_attributes=True)
 

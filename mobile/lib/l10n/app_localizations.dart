@@ -1389,6 +1389,12 @@ abstract class AppLocalizations {
   /// In uz, this message translates to:
   /// **'Shifokorlarni ko‘rish uchun tanlang'**
   String get chooseCareSubtitle;
+
+  /// No description provided for @queueClosedForNewPatients.
+  ///
+  /// In uz, this message translates to:
+  /// **'Yangi bemorlar uchun navbat yopilgan.'**
+  String get queueClosedForNewPatients;
 }
 
 class _AppLocalizationsDelegate

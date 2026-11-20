@@ -11,11 +11,12 @@ from app.core.config import settings
 from app.core.security import create_check_in_qr_token, decode_check_in_qr_token
 from app.models.clinic import Clinic
 from app.models.doctor import Doctor
-from app.models.queue import Queue, SmartCallMode
+from app.models.queue import Queue, ShiftStatus, SmartCallMode
 from app.models.queue_ticket import CheckInMethod, QueueTicket, TicketSource, TicketStatus
 from app.models.specialization import Specialization
 from app.models.user import User, UserRole
 from app.realtime import notify_display_update
+from app.services.shift_service import ACTIVE_SHIFT_STATUSES, get_clinic_local_date
 from app.services.queue_notifications import (
     schedule_approaching_check,
     schedule_called_notification,
@@ -147,7 +148,6 @@ def get_my_ticket(
     ).first()
 
     if not result and include_skipped:
-        today = date.today()
         result = db.execute(
             select(QueueTicket, Queue, Doctor, Specialization)
             .join(Queue, QueueTicket.queue_id == Queue.id)
@@ -156,8 +156,8 @@ def get_my_ticket(
             .where(
                 QueueTicket.patient_id == current_user.id,
                 QueueTicket.status == TicketStatus.SKIPPED,
-                Queue.queue_date == today,
                 Queue.is_active == True,
+                Queue.shift_status.in_(ACTIVE_SHIFT_STATUSES),
             )
             .order_by(QueueTicket.created_at.desc())
         ).first()
@@ -185,7 +185,6 @@ def get_my_tickets(
     current_user: User = Depends(require_roles(UserRole.PATIENT)),
     lang: str = Depends(get_language),
 ) -> list[MyQueueTicketResponse]:
-    today = date.today()
     active_filter = QueueTicket.status.in_([
         TicketStatus.WAITING,
         TicketStatus.CALLED,
@@ -213,7 +212,7 @@ def get_my_tickets(
         .where(
             QueueTicket.patient_id == current_user.id,
             Queue.is_active == True,
-            Queue.queue_date == today,
+            Queue.shift_status.in_(ACTIVE_SHIFT_STATUSES),
             status_filter,
         )
         .order_by(
@@ -303,7 +302,10 @@ def open_today_queue(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_roles(UserRole.RECEPTIONIST, UserRole.ADMIN)),
 ) -> Queue:
-    doctor = db.scalar(select(Doctor).where(Doctor.id == request.doctor_id))
+    # Lock Doctor row to serialize concurrent Start Shift requests per doctor
+    doctor = db.scalar(
+        select(Doctor).where(Doctor.id == request.doctor_id).with_for_update()
+    )
     if not doctor:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -328,30 +330,36 @@ def open_today_queue(
             detail="Doctor is inactive",
         )
 
-    target_date = request.queue_date or date.today()
+    clinic = db.scalar(select(Clinic).where(Clinic.id == doctor.clinic_id))
+    target_date = request.queue_date or get_clinic_local_date(clinic)
 
-    existing_queue = db.scalar(
-        select(Queue).where(
+    existing_unfinished = db.scalar(
+        select(Queue)
+        .where(
             Queue.doctor_id == doctor.id,
-            Queue.queue_date == target_date,
+            Queue.shift_status.in_(ACTIVE_SHIFT_STATUSES),
         )
+        .order_by(Queue.id.desc())
     )
 
-    if existing_queue:
-        if existing_queue.is_active:
+    if existing_unfinished:
+        if existing_unfinished.is_active:
             if request.idempotent:
-                return existing_queue
+                return existing_unfinished
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail="Queue already exists for this doctor today",
+                detail="An active shift already exists for this doctor",
             )
-        else:
-            existing_queue.is_active = True
-            existing_queue.is_paused = False
-            db.commit()
-            db.refresh(existing_queue)
-            notify_display_update(doctor.clinic_id, background_tasks, queue_id=existing_queue.id)
-            return existing_queue
+        # Re-open legacy/pre-finish deactivated queue row
+        existing_unfinished.is_active = True
+        existing_unfinished.is_paused = False
+        existing_unfinished.shift_status = ShiftStatus.OPEN
+        if existing_unfinished.started_at is None:
+            existing_unfinished.started_at = datetime.now(timezone.utc)
+        db.commit()
+        db.refresh(existing_unfinished)
+        notify_display_update(doctor.clinic_id, background_tasks, queue_id=existing_unfinished.id)
+        return existing_unfinished
 
     new_queue = Queue(
         doctor_id=doctor.id,
@@ -359,6 +367,8 @@ def open_today_queue(
         is_paused=False,
         is_active=True,
         smart_call_mode=SmartCallMode.MANUAL,
+        shift_status=ShiftStatus.OPEN,
+        started_at=datetime.now(timezone.utc),
     )
     db.add(new_queue)
     try:
@@ -369,14 +379,14 @@ def open_today_queue(
         existing = db.scalar(
             select(Queue).where(
                 Queue.doctor_id == doctor.id,
-                Queue.queue_date == target_date,
+                Queue.shift_status.in_(ACTIVE_SHIFT_STATUSES),
             )
         )
         if existing and request.idempotent:
             return existing
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Queue already exists for this doctor today",
+            detail="An active shift already exists for this doctor",
         )
 
     notify_display_update(doctor.clinic_id, background_tasks, queue_id=new_queue.id)
@@ -399,8 +409,6 @@ def get_reception_today_queues(
                 detail="Receptionist is not assigned to a clinic",
             )
 
-    today = date.today()
-
     query = (
         select(
             Queue,
@@ -418,13 +426,19 @@ def get_reception_today_queues(
             func.count(
                 case((QueueTicket.status == TicketStatus.COMPLETED, QueueTicket.id))
             ).label("completed_count"),
+            func.count(
+                case((QueueTicket.status == TicketStatus.SKIPPED, QueueTicket.id))
+            ).label("skipped_count"),
+            func.count(
+                case((QueueTicket.status == TicketStatus.CANCELLED, QueueTicket.id))
+            ).label("cancelled_count"),
         )
         .join(Doctor, Queue.doctor_id == Doctor.id)
         .join(Specialization, Doctor.specialization_id == Specialization.id)
         .outerjoin(QueueTicket, QueueTicket.queue_id == Queue.id)
         .where(
-            Queue.queue_date == today,
             Queue.is_active == True,
+            Queue.shift_status.in_(ACTIVE_SHIFT_STATUSES),
         )
     )
 
@@ -444,6 +458,9 @@ def get_reception_today_queues(
             is_paused=queue.is_paused,
             is_active=queue.is_active,
             smart_call_mode=queue.smart_call_mode,
+            shift_status=queue.shift_status,
+            started_at=queue.started_at,
+            ended_at=queue.ended_at,
             doctor=ReceptionQueueDoctorResponse(
                 id=doctor.id,
                 full_name=doctor.full_name,
@@ -457,8 +474,20 @@ def get_reception_today_queues(
             called_count=called_count,
             serving_count=serving_count,
             completed_count=completed_count,
+            skipped_count=skipped_count,
+            cancelled_count=cancelled_count,
         )
-        for queue, doctor, specialization, waiting_count, called_count, serving_count, completed_count in results
+        for (
+            queue,
+            doctor,
+            specialization,
+            waiting_count,
+            called_count,
+            serving_count,
+            completed_count,
+            skipped_count,
+            cancelled_count,
+        ) in results
     ]
 
 
@@ -546,7 +575,7 @@ def qr_check_in_patient(
         if (
             ticket_doctor.clinic_id != clinic_id
             or not ticket_queue.is_active
-            or ticket_queue.queue_date != today
+            or ticket_queue.shift_status not in ACTIVE_SHIFT_STATUSES
         ):
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -577,7 +606,7 @@ def qr_check_in_patient(
                 QueueTicket.source == TicketSource.ONLINE,
                 QueueTicket.status == TicketStatus.WAITING,
                 Doctor.clinic_id == clinic_id,
-                Queue.queue_date == today,
+                Queue.shift_status.in_(ACTIVE_SHIFT_STATUSES),
                 Queue.is_active == True,
             )
         ).all()
@@ -627,7 +656,7 @@ def get_queue_status(
             detail="Queue not found",
         )
 
-    if not queue.is_active:
+    if not queue.is_active or queue.shift_status == ShiftStatus.FINISHED:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Queue is inactive",
@@ -687,7 +716,7 @@ def pause_queue(
                 detail="Cannot access another clinic's queue",
             )
 
-    if not queue.is_active:
+    if not queue.is_active or queue.shift_status == ShiftStatus.FINISHED:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Queue is inactive",
@@ -752,7 +781,7 @@ def resume_queue(
                 detail="Cannot access another clinic's queue",
             )
 
-    if not queue.is_active:
+    if not queue.is_active or queue.shift_status == ShiftStatus.FINISHED:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Queue is inactive",
@@ -860,7 +889,7 @@ def call_next_patient(
                 detail="Cannot access another clinic's queue",
             )
 
-    if not queue.is_active:
+    if not queue.is_active or queue.shift_status == ShiftStatus.FINISHED:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Queue is not active",
@@ -972,7 +1001,7 @@ def call_patient(
                 detail="Cannot access another clinic's queue",
             )
 
-    if not queue.is_active:
+    if not queue.is_active or queue.shift_status == ShiftStatus.FINISHED:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Queue is not active",
@@ -1139,7 +1168,7 @@ def update_queue_smart_call_mode(
 ) -> Queue:
     queue, doctor = _get_locked_queue_and_doctor_for_staff(db, queue_id, current_user)
 
-    if not queue.is_active:
+    if not queue.is_active or queue.shift_status == ShiftStatus.FINISHED:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Queue is inactive",
@@ -1151,6 +1180,112 @@ def update_queue_smart_call_mode(
         db.refresh(queue)
         notify_display_update(doctor.clinic_id, background_tasks, queue_id=queue.id)
 
+    return queue
+
+
+@router.patch(
+    "/{queue_id}/stop-admissions",
+    response_model=QueueResponse,
+)
+def stop_shift_admissions(
+    queue_id: int,
+    background_tasks: BackgroundTasks = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles(UserRole.RECEPTIONIST, UserRole.ADMIN)),
+) -> Queue:
+    queue, doctor = _get_locked_queue_and_doctor_for_staff(db, queue_id, current_user)
+
+    if not queue.is_active or queue.shift_status == ShiftStatus.FINISHED:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Shift is already finished",
+        )
+    if queue.shift_status == ShiftStatus.CLOSING:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Shift is already closing admissions",
+        )
+
+    queue.shift_status = ShiftStatus.CLOSING
+    db.commit()
+    db.refresh(queue)
+    notify_display_update(doctor.clinic_id, background_tasks, queue_id=queue.id)
+    return queue
+
+
+@router.patch(
+    "/{queue_id}/reopen-admissions",
+    response_model=QueueResponse,
+)
+def reopen_shift_admissions(
+    queue_id: int,
+    background_tasks: BackgroundTasks = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles(UserRole.RECEPTIONIST, UserRole.ADMIN)),
+) -> Queue:
+    queue, doctor = _get_locked_queue_and_doctor_for_staff(db, queue_id, current_user)
+
+    if not queue.is_active or queue.shift_status == ShiftStatus.FINISHED:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Cannot reopen a finished shift",
+        )
+    if queue.shift_status == ShiftStatus.OPEN:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Shift admissions are already open",
+        )
+
+    queue.shift_status = ShiftStatus.OPEN
+    db.commit()
+    db.refresh(queue)
+    notify_display_update(doctor.clinic_id, background_tasks, queue_id=queue.id)
+    return queue
+
+
+@router.patch(
+    "/{queue_id}/finish",
+    response_model=QueueResponse,
+)
+def finish_shift(
+    queue_id: int,
+    background_tasks: BackgroundTasks = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles(UserRole.RECEPTIONIST, UserRole.ADMIN)),
+) -> Queue:
+    queue, doctor = _get_locked_queue_and_doctor_for_staff(db, queue_id, current_user)
+
+    if not queue.is_active or queue.shift_status == ShiftStatus.FINISHED:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Shift is already finished",
+        )
+
+    unresolved_active = db.scalar(
+        select(QueueTicket.id)
+        .where(
+            QueueTicket.queue_id == queue.id,
+            QueueTicket.status.in_([
+                TicketStatus.WAITING,
+                TicketStatus.CALLED,
+                TicketStatus.SERVING,
+            ]),
+        )
+        .limit(1)
+    )
+    if unresolved_active is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Cannot finish shift while waiting, called, or serving patients remain",
+        )
+
+    queue.shift_status = ShiftStatus.FINISHED
+    queue.is_active = False
+    queue.is_paused = False
+    queue.ended_at = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(queue)
+    notify_display_update(doctor.clinic_id, background_tasks, queue_id=queue.id)
     return queue
 
 
@@ -1226,6 +1361,12 @@ def complete_patient(
 ) -> CompleteTicketResponse:
     queue, doctor = _get_locked_queue_and_doctor_for_staff(db, queue_id, current_user)
 
+    if not queue.is_active or queue.shift_status == ShiftStatus.FINISHED:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Shift has already finished",
+        )
+
     ticket = db.scalar(
         select(QueueTicket).where(
             QueueTicket.id == ticket_id,
@@ -1245,6 +1386,7 @@ def complete_patient(
         )
 
     ticket.status = TicketStatus.COMPLETED
+    ticket.completed_at = datetime.now(timezone.utc)
     # Flush COMPLETED transition before checking active tickets or running Smart Call advance
     db.flush()
 
@@ -1272,6 +1414,12 @@ def skip_patient(
     current_user: User = Depends(require_roles(UserRole.RECEPTIONIST, UserRole.ADMIN)),
 ) -> CompleteTicketResponse:
     queue, doctor = _get_locked_queue_and_doctor_for_staff(db, queue_id, current_user)
+
+    if not queue.is_active or queue.shift_status == ShiftStatus.FINISHED:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Shift has already finished",
+        )
 
     ticket = db.scalar(
         select(QueueTicket).where(
@@ -1372,6 +1520,12 @@ def restore_patient(
             detail="Only skipped tickets can be restored",
         )
 
+    if not queue.is_active or queue.shift_status == ShiftStatus.FINISHED:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Shift has already finished",
+        )
+
     current_max_pos = db.scalar(
         select(func.coalesce(func.max(QueueTicket.queue_position), 0)).where(
             QueueTicket.queue_id == queue.id
@@ -1452,6 +1606,12 @@ def cancel_patient(
             detail="Only waiting, called, or skipped tickets can be cancelled",
         )
 
+    if not queue.is_active or queue.shift_status == ShiftStatus.FINISHED:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Shift has already finished",
+        )
+
     ticket.status = TicketStatus.CANCELLED
     clear_ticket_call_countdown(ticket)
     db.commit()
@@ -1520,6 +1680,12 @@ def manual_check_in_patient(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Only waiting tickets can be checked in",
+        )
+
+    if not queue.is_active or queue.shift_status == ShiftStatus.FINISHED:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Shift has already finished",
         )
 
     if ticket.checked_in_at is not None:
@@ -1594,6 +1760,12 @@ def miss_turn_patient(
             detail="Only waiting tickets can miss a turn",
         )
 
+    if not queue.is_active or queue.shift_status == ShiftStatus.FINISHED:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Shift has already finished",
+        )
+
     if ticket.checked_in_at is not None:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -1645,10 +1817,16 @@ def join_queue(
             detail="Queue not found",
         )
 
-    if not queue.is_active:
+    if not queue.is_active or queue.shift_status == ShiftStatus.FINISHED:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Queue is inactive",
+        )
+
+    if queue.shift_status == ShiftStatus.CLOSING:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Queue closed for new patients",
         )
 
     if queue.is_paused:
@@ -1685,7 +1863,7 @@ def join_queue(
             detail="Patient already has an active ticket in this queue",
         )
 
-    # Enforce at most one unresolved ticket per patient, specialization, clinic, and queue date
+    # Enforce at most one unresolved ticket per patient, specialization, clinic, and active shift
     same_spec_ticket = db.scalar(
         select(QueueTicket)
         .join(Queue, QueueTicket.queue_id == Queue.id)
@@ -1694,8 +1872,8 @@ def join_queue(
             QueueTicket.patient_id == current_user.id,
             Doctor.specialization_id == doctor.specialization_id,
             Doctor.clinic_id == doctor.clinic_id,
-            Queue.queue_date == queue.queue_date,
             Queue.is_active == True,
+            Queue.shift_status.in_(ACTIVE_SHIFT_STATUSES),
             QueueTicket.status.in_(unresolved_statuses),
         )
         .limit(1)
@@ -1762,10 +1940,16 @@ def add_walk_in_patient(
             detail="Queue not found",
         )
 
-    if not queue.is_active:
+    if not queue.is_active or queue.shift_status == ShiftStatus.FINISHED:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Queue is inactive",
+        )
+
+    if queue.shift_status == ShiftStatus.CLOSING:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Queue closed for new patients",
         )
 
     if queue.is_paused:

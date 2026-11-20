@@ -98,6 +98,24 @@ export async function updateSmartCallMode(
   });
 }
 
+export async function stopShiftAdmissions(queueId: number): Promise<QueueResponse> {
+  return apiClient<QueueResponse>(`/api/queues/${queueId}/stop-admissions`, {
+    method: 'PATCH',
+  });
+}
+
+export async function reopenShiftAdmissions(queueId: number): Promise<QueueResponse> {
+  return apiClient<QueueResponse>(`/api/queues/${queueId}/reopen-admissions`, {
+    method: 'PATCH',
+  });
+}
+
+export async function finishShift(queueId: number): Promise<QueueResponse> {
+  return apiClient<QueueResponse>(`/api/queues/${queueId}/finish`, {
+    method: 'PATCH',
+  });
+}
+
 export async function skipPatient(queueId: number, ticketId: number): Promise<QueueTicket> {
   return apiClient<QueueTicket>(`/api/queues/${queueId}/tickets/${ticketId}/skip`, {
     method: 'PATCH',

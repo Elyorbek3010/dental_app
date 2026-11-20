@@ -404,8 +404,9 @@ class PreJoinQueueVisibilityBackendTest(unittest.TestCase):
         data = res.json()
         expected_keys = {
             "id", "queue_id", "doctor_id", "queue_date",
-            "is_paused", "is_active", "waiting_count",
-            "called_count", "serving_count", "estimated_position_if_joined",
+            "is_paused", "is_active", "shift_status", "started_at",
+            "waiting_count", "called_count", "serving_count",
+            "estimated_position_if_joined",
         }
         self.assertEqual(set(data.keys()), expected_keys)
 

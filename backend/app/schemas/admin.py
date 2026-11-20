@@ -1,5 +1,7 @@
-from datetime import datetime
+from datetime import date, datetime
 from pydantic import BaseModel, ConfigDict, Field
+
+from app.models.queue import ShiftStatus, SmartCallMode
 
 
 # --- Specialization Schemas ---
@@ -89,11 +91,13 @@ class AdminClinicResponse(BaseModel):
     id: int
     name: str
     smart_call_timeout_seconds: int
+    timezone: str = "Asia/Tashkent"
 
 
 class AdminClinicUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=255)
     smart_call_timeout_seconds: int | None = Field(default=None, ge=15, le=1800)
+    timezone: str | None = Field(default=None, min_length=1, max_length=64)
 
 
 # --- Analytics Schemas ---
@@ -124,3 +128,72 @@ class AdminAnalyticsOverview(BaseModel):
     today_tickets_skipped: int
     today_tickets_cancelled: int
     doctors_today: list[DoctorQueueSummary]
+
+
+# --- Doctor Performance & Shift History Schemas ---
+class DoctorPerformanceSummary(BaseModel):
+    completed_today: int
+    completed_this_week: int
+    completed_this_month: int
+    completed_this_year: int
+    completed_all_time: int
+    completed_in_selected_range: int
+    legacy_unattributed_completed_count: int
+    total_shifts: int
+    active_shifts: int
+    finished_shifts: int
+
+
+class DoctorPerformanceItem(BaseModel):
+    doctor_id: int
+    doctor_name: str
+    specialization_id: int | None = None
+    specialization_name: str
+    room_number: str | None = None
+    is_active: bool
+    current_shift_status: str
+    completed_today: int
+    completed_this_week: int
+    completed_this_month: int
+    completed_this_year: int
+    completed_all_time: int
+    completed_in_selected_range: int
+    legacy_unattributed_completed_count: int
+    shifts_count: int
+    avg_shift_duration_minutes: float | None = None
+
+
+class DoctorShiftHistoryItem(BaseModel):
+    queue_id: int
+    doctor_id: int
+    doctor_name: str
+    specialization_id: int | None = None
+    specialization_name: str
+    room_number: str | None = None
+    queue_date: date
+    shift_status: ShiftStatus
+    is_paused: bool
+    smart_call_mode: SmartCallMode
+    started_at: datetime | None = None
+    ended_at: datetime | None = None
+    duration_seconds: int | None = None
+    total_tickets: int
+    completed_count: int
+    waiting_count: int
+    called_count: int
+    serving_count: int
+    skipped_count: int
+    cancelled_count: int
+
+
+class AdminDoctorPerformanceResponse(BaseModel):
+    clinic_id: int
+    clinic_name: str
+    clinic_timezone: str
+    period: str
+    date_from: date | None = None
+    date_to: date | None = None
+    generated_at: datetime
+    summary: DoctorPerformanceSummary
+    doctors: list[DoctorPerformanceItem]
+    shifts: list[DoctorShiftHistoryItem]

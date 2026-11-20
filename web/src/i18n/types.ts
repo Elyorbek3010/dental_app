@@ -311,4 +311,59 @@ export interface TranslationDictionary {
   allStatuses: string;
   skippedCount: string;
   adminCompletionRate: string;
+
+  // Shift Lifecycle Controls & Messages
+  shiftStatusOpen: string;
+  shiftStatusClosing: string;
+  shiftStatusFinished: string;
+  startShift: string;
+  stopNewTickets: string;
+  reopenAdmissions: string;
+  finishShift: string;
+  finishShiftConfirmTitle: string;
+  finishShiftConfirmMessage: string;
+  finishShiftSkippedWarning: string;
+  finishShiftBlockedHint: string;
+  shiftStopAdmissionsNotice: string;
+  shiftReopenAdmissionsNotice: string;
+  shiftFinishedNotice: string;
+  shiftClosingBannerHint: string;
+  shiftPausedBannerHint: string;
+  shiftStartedAtLabel: string;
+  errorClosingNewPatients: string;
+
+  // Admin Doctor Performance & History
+  adminNavDoctorHistory: string;
+  adminDoctorHistoryTitle: string;
+  adminDoctorHistorySubtitle: string;
+  completedTodayLabel: string;
+  completedWeekLabel: string;
+  completedMonthLabel: string;
+  completedYearLabel: string;
+  completedAllTimeLabel: string;
+  completedSelectedRangeLabel: string;
+  periodToday: string;
+  periodWeek: string;
+  periodMonth: string;
+  periodYear: string;
+  periodCustom: string;
+  periodAllTime: string;
+  exportCsv: string;
+  exportingCsv: string;
+  doctorPerformanceSummaryTitle: string;
+  shiftHistoryTitle: string;
+  shiftDurationLabel: string;
+  totalIssuedLabel: string;
+  avgShiftDurationLabel: string;
+  currentShiftLabel: string;
+  noShiftActive: string;
+  legacyNoTimestampNote: string;
+  legacyDurationLabel: string;
+  filterBySpecialization: string;
+  allSpecializations: string;
+  dateFromLabel: string;
+  dateToLabel: string;
+  noShiftHistoryFound: string;
+  shiftStartTimeCol: string;
+  shiftEndTimeCol: string;
 }

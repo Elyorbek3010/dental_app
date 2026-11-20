@@ -300,5 +300,6 @@
   "viewLiveQueueLabel": "Jonli navbat",
   "clinicPortalBadge": "Stomatologiya klinikasi",
   "searchSpecialtiesHint": "Mutaxassislikni qidirish...",
-  "chooseCareSubtitle": "Shifokorlarni ko‘rish uchun tanlang"
+  "chooseCareSubtitle": "Shifokorlarni ko‘rish uchun tanlang",
+  "queueClosedForNewPatients": "Yangi bemorlar uchun navbat yopilgan."
 }

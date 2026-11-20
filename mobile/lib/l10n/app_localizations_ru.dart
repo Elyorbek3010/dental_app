@@ -719,4 +719,8 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get chooseCareSubtitle => 'Выберите направление для записи';
+
+  @override
+  String get queueClosedForNewPatients =>
+      'Очередь закрыта для новых пациентов.';
 }

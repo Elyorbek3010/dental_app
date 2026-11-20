@@ -6,6 +6,7 @@ class DoctorQueue {
   final String queueDate;
   final bool isPaused;
   final bool isActive;
+  final String shiftStatus;
   final int waitingCount;
   final int calledCount;
   final int servingCount;
@@ -19,12 +20,16 @@ class DoctorQueue {
     required this.queueDate,
     required this.isPaused,
     required this.isActive,
+    this.shiftStatus = 'OPEN',
     this.waitingCount = 0,
     this.calledCount = 0,
     this.servingCount = 0,
     this.estimatedPositionIfJoined = 1,
     this.hasPreviewMetrics = false,
   }) : queueId = queueId ?? id;
+
+  bool get isClosing => shiftStatus.toUpperCase() == 'CLOSING';
+  bool get isFinished => shiftStatus.toUpperCase() == 'FINISHED';
 
   factory DoctorQueue.fromJson(Map<String, dynamic> json) {
     final rawId = json['id'] as int? ?? json['queue_id'] as int;
@@ -41,6 +46,7 @@ class DoctorQueue {
       queueDate: json['queue_date'] as String,
       isPaused: json['is_paused'] as bool? ?? false,
       isActive: json['is_active'] as bool? ?? true,
+      shiftStatus: json['shift_status'] as String? ?? 'OPEN',
       waitingCount: json['waiting_count'] as int? ?? 0,
       calledCount: json['called_count'] as int? ?? 0,
       servingCount: json['serving_count'] as int? ?? 0,
@@ -64,6 +70,7 @@ class DoctorQueue {
       map['called_count'] = calledCount;
       map['serving_count'] = servingCount;
       map['estimated_position_if_joined'] = estimatedPositionIfJoined;
+      map['shift_status'] = shiftStatus;
     }
     return map;
   }
@@ -81,7 +88,8 @@ class DoctorQueue {
           servingCount == other.servingCount &&
           estimatedPositionIfJoined == other.estimatedPositionIfJoined &&
           isPaused == other.isPaused &&
-          isActive == other.isActive;
+          isActive == other.isActive &&
+          shiftStatus == other.shiftStatus;
 
   @override
   int get hashCode =>
@@ -93,7 +101,8 @@ class DoctorQueue {
       servingCount.hashCode ^
       estimatedPositionIfJoined.hashCode ^
       isPaused.hashCode ^
-      isActive.hashCode;
+      isActive.hashCode ^
+      shiftStatus.hashCode;
 
   @override
   String toString() =>

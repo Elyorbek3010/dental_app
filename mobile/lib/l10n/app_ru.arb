@@ -228,5 +228,6 @@
   "viewLiveQueueLabel": "Живая очередь",
   "clinicPortalBadge": "Стоматологическая клиника",
   "searchSpecialtiesHint": "Поиск направления...",
-  "chooseCareSubtitle": "Выберите направление для записи"
+  "chooseCareSubtitle": "Выберите направление для записи",
+  "queueClosedForNewPatients": "Очередь закрыта для новых пациентов."
 }

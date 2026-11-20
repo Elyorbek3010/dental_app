@@ -38,6 +38,7 @@ class QueueTicket(Base):
             name="ck_queue_ticket_paused_remaining_non_negative",
         ),
         Index("ix_queue_tickets_status_deadline", "status", "call_deadline_at"),
+        Index("ix_queue_tickets_completed_at", "completed_at"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -128,6 +129,12 @@ class QueueTicket(Base):
 
     paused_remaining_seconds: Mapped[int | None] = mapped_column(
         Integer,
+        nullable=True,
+        default=None,
+    )
+
+    completed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
         nullable=True,
         default=None,
     )

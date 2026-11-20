@@ -21,6 +21,7 @@ from app.schemas.public import (
     PublicDisplaySpecialization,
     PublicDisplayTicket,
 )
+from app.services.shift_service import ACTIVE_SHIFT_STATUSES
 
 router = APIRouter(
     prefix="/api/public",
@@ -89,19 +90,17 @@ def get_public_clinic_display(
             detail="Clinic not found",
         )
 
-    today = date.today()
-
-    # Fetch active queues for this clinic today, ordered by doctor id
+    # Fetch currently active shifts (OPEN or CLOSING, including overnight shifts)
     queue_rows = db.execute(
         select(Queue, Doctor, Specialization)
         .join(Doctor, Queue.doctor_id == Doctor.id)
         .join(Specialization, Doctor.specialization_id == Specialization.id)
         .where(
             Doctor.clinic_id == clinic_id,
-            Queue.queue_date == today,
             Queue.is_active == True,
+            Queue.shift_status.in_(ACTIVE_SHIFT_STATUSES),
         )
-        .order_by(Doctor.id.asc())
+        .order_by(Doctor.id.asc(), Queue.id.desc())
     ).all()
 
     clinic_dto = PublicDisplayClinic(
@@ -166,6 +165,7 @@ def get_public_clinic_display(
                     name=specialization.get_localized_name(lang),
                 ),
                 is_paused=queue.is_paused,
+                shift_status=queue.shift_status,
                 called_ticket=called_by_queue.get(queue.id),
                 waiting_tickets=waiting_by_queue.get(queue.id, []),
             )

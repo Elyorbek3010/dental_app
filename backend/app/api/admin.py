@@ -1,10 +1,10 @@
 from datetime import date
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_db, require_roles
+from app.api.deps import get_db, get_language, require_roles
 from app.core.security import get_password_hash
 from app.models.clinic import Clinic
 from app.models.doctor import Doctor
@@ -17,6 +17,7 @@ from app.schemas.admin import (
     AdminClinicResponse,
     AdminClinicUpdate,
     AdminDoctorCreate,
+    AdminDoctorPerformanceResponse,
     AdminDoctorResponse,
     AdminDoctorUpdate,
     AdminReceptionistCreate,
@@ -27,6 +28,12 @@ from app.schemas.admin import (
     AdminSpecializationUpdate,
     DoctorQueueSummary,
 )
+from app.services.shift_reporting import (
+    ReportingPeriod,
+    compute_doctor_performance_and_history,
+    render_performance_csv,
+)
+from app.services.shift_service import ACTIVE_SHIFT_STATUSES, validate_timezone_name
 
 router = APIRouter(
     prefix="/api/admin",
@@ -88,6 +95,15 @@ def update_clinic_info(
 
     if payload.smart_call_timeout_seconds is not None:
         clinic.smart_call_timeout_seconds = payload.smart_call_timeout_seconds
+
+    if payload.timezone is not None:
+        try:
+            clinic.timezone = validate_timezone_name(payload.timezone)
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=str(exc),
+            )
 
     db.commit()
     db.refresh(clinic)
@@ -490,14 +506,14 @@ def get_analytics_overview(
         )
     ) or 0
 
-    # Today's queues in this clinic
+    # Active shifts in this clinic (supports overnight shifts)
     today_queues = db.scalars(
         select(Queue)
         .join(Doctor, Queue.doctor_id == Doctor.id)
         .where(
             Doctor.clinic_id == clinic_id,
-            Queue.queue_date == today,
             Queue.is_active == True,
+            Queue.shift_status.in_(ACTIVE_SHIFT_STATUSES),
         )
     ).all()
     today_opened_queues = len(today_queues)
@@ -522,15 +538,15 @@ def get_analytics_overview(
     cancelled_count = status_map.get(TicketStatus.CANCELLED, 0)
     total_tickets = sum(status_map.values())
 
-    # Doctors queue summaries for today
+    # Doctors active shift summaries
     doctors_query = db.execute(
         select(Doctor, Specialization, Queue)
         .outerjoin(Specialization, Doctor.specialization_id == Specialization.id)
         .outerjoin(
             Queue,
             (Queue.doctor_id == Doctor.id)
-            & (Queue.queue_date == today)
-            & (Queue.is_active == True),
+            & (Queue.is_active == True)
+            & (Queue.shift_status.in_(ACTIVE_SHIFT_STATUSES)),
         )
         .where(Doctor.clinic_id == clinic_id)
         .order_by(Doctor.full_name.asc())
@@ -585,4 +601,73 @@ def get_analytics_overview(
         today_tickets_skipped=skipped_count,
         today_tickets_cancelled=cancelled_count,
         doctors_today=doctor_summaries,
+    )
+
+
+@router.get("/doctors/performance", response_model=AdminDoctorPerformanceResponse)
+def get_doctor_performance_history(
+    doctor_id: int | None = Query(default=None),
+    specialization_id: int | None = Query(default=None),
+    period: ReportingPeriod = Query(default="today"),
+    date_from: date | None = Query(default=None),
+    date_to: date | None = Query(default=None),
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_roles(UserRole.ADMIN)),
+    lang: str = Depends(get_language),
+) -> AdminDoctorPerformanceResponse:
+    clinic_id = _get_admin_clinic_id(admin)
+    clinic = db.scalar(select(Clinic).where(Clinic.id == clinic_id))
+    if not clinic:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Clinic not found",
+        )
+    return compute_doctor_performance_and_history(
+        db,
+        clinic,
+        doctor_id=doctor_id,
+        specialization_id=specialization_id,
+        period=period,
+        date_from=date_from,
+        date_to=date_to,
+        lang=lang,
+    )
+
+
+@router.get("/doctors/performance/export")
+def export_doctor_performance_csv(
+    doctor_id: int | None = Query(default=None),
+    specialization_id: int | None = Query(default=None),
+    period: ReportingPeriod = Query(default="today"),
+    date_from: date | None = Query(default=None),
+    date_to: date | None = Query(default=None),
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_roles(UserRole.ADMIN)),
+    lang: str = Depends(get_language),
+) -> Response:
+    clinic_id = _get_admin_clinic_id(admin)
+    clinic = db.scalar(select(Clinic).where(Clinic.id == clinic_id))
+    if not clinic:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Clinic not found",
+        )
+    report = compute_doctor_performance_and_history(
+        db,
+        clinic,
+        doctor_id=doctor_id,
+        specialization_id=specialization_id,
+        period=period,
+        date_from=date_from,
+        date_to=date_to,
+        lang=lang,
+    )
+    csv_text = render_performance_csv(report)
+    return Response(
+        content=csv_text,
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": 'attachment; filename="doctor-performance-history.csv"',
+            "Cache-Control": "no-store",
+        },
     )

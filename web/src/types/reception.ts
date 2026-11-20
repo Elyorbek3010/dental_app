@@ -12,6 +12,8 @@ export type CheckInMethod = 'QR' | 'RECEPTION' | 'WALK_IN';
 
 export type SmartCallMode = 'MANUAL' | 'AUTOMATIC';
 
+export type ShiftStatus = 'OPEN' | 'CLOSING' | 'FINISHED';
+
 export interface Doctor {
   id: number;
   clinic_id: number;
@@ -44,12 +46,17 @@ export interface ReceptionQueueOverview {
   is_paused: boolean;
   is_active: boolean;
   smart_call_mode: SmartCallMode;
+  shift_status: ShiftStatus;
+  started_at?: string | null;
+  ended_at?: string | null;
   doctor: ReceptionQueueDoctor;
   specialization: ReceptionQueueSpecialization;
   waiting_count: number;
   called_count: number;
   serving_count: number;
   completed_count: number;
+  skipped_count?: number;
+  cancelled_count?: number;
 }
 
 export interface QueueTicket {
@@ -94,6 +101,9 @@ export interface QueueResponse {
   is_paused: boolean;
   is_active: boolean;
   smart_call_mode: SmartCallMode;
+  shift_status: ShiftStatus;
+  started_at?: string | null;
+  ended_at?: string | null;
 }
 
 export interface CheckInQRResponse {
