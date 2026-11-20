@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import {
   BarChart3,
@@ -15,6 +15,7 @@ import { useI18n } from '../../i18n/useI18n';
 import type { Language } from '../../i18n/types';
 import { ConfirmModal } from '../common/ConfirmModal';
 import { getAdminClinicApi, updateAdminClinicApi } from '../../api/admin';
+import { useReceptionRealtime } from '../../hooks/useReceptionRealtime';
 import type { AdminClinic } from '../../types/admin';
 
 export const AdminLayout: React.FC = () => {
@@ -29,6 +30,37 @@ export const AdminLayout: React.FC = () => {
   const [editClinicName, setEditClinicName] = useState('');
   const [isSavingClinic, setIsSavingClinic] = useState(false);
   const [clinicError, setClinicError] = useState<string | null>(null);
+
+  const clinicId = clinic?.id ?? user?.clinic_id;
+  const hasConnectedOnceRef = useRef(false);
+  const wasDisconnectedRef = useRef(false);
+
+  const handleRealtimeUpdate = useCallback(() => {
+    window.dispatchEvent(new CustomEvent('admin:refresh'));
+  }, []);
+
+  const { isConnected } = useReceptionRealtime({
+    clinicId,
+    onUpdate: handleRealtimeUpdate,
+    enabled: !!clinicId,
+  });
+
+  useEffect(() => {
+    hasConnectedOnceRef.current = false;
+    wasDisconnectedRef.current = false;
+  }, [clinicId]);
+
+  useEffect(() => {
+    if (isConnected) {
+      if (hasConnectedOnceRef.current && wasDisconnectedRef.current) {
+        window.dispatchEvent(new CustomEvent('admin:refresh'));
+      }
+      hasConnectedOnceRef.current = true;
+      wasDisconnectedRef.current = false;
+    } else if (hasConnectedOnceRef.current) {
+      wasDisconnectedRef.current = true;
+    }
+  }, [isConnected]);
 
   useEffect(() => {
     getAdminClinicApi()
@@ -186,6 +218,18 @@ export const AdminLayout: React.FC = () => {
               <Building2 className="h-3.5 w-3.5 text-purple-600 dark:text-purple-400" />
               <span>{clinic?.name || t.unassignedClinic}</span>
             </button>
+
+            {/* Realtime WebSocket Badge */}
+            <div className="flex items-center gap-1.5 pl-3 border-l border-zinc-200 dark:border-zinc-800">
+              <span
+                className={`h-2.5 w-2.5 rounded-full ${
+                  isConnected ? 'bg-emerald-500 animate-pulse' : 'bg-amber-400'
+                }`}
+              />
+              <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400">
+                {isConnected ? t.connected : t.reconnecting}
+              </span>
+            </div>
           </div>
 
           {/* Right Header Actions */}
