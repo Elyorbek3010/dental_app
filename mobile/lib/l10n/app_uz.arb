@@ -287,5 +287,8 @@
   "fgNotifRestored": "Taloningiz navbatga qayta tiklandi.",
   "fgNotifMissedTurn": "Navbatingiz o‘tkazildi va navbat oxiriga ko‘chirildi.",
   "remainingTimeLabel": "Qolgan vaqt",
-  "pausedCountdownBadge": "To‘xtatilgan"
+  "pausedCountdownBadge": "To‘xtatilgan",
+  "alreadyJoinedSpecializationError": "Sizda ushbu mutaxassislik bo‘yicha allaqachon faol talon mavjud.",
+  "queuePausedBadge": "Navbat vaqtincha to‘xtatilgan",
+  "syncConnectionWarning": "Aloqa uzildi. Oxirgi maʼlumotlar ko‘rsatilmoqda, qayta ulanilmoqda..."
 }

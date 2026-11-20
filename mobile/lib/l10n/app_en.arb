@@ -215,5 +215,8 @@
   "fgNotifRestored": "Your ticket has been restored to the queue.",
   "fgNotifMissedTurn": "You missed your turn and your ticket was moved to the end.",
   "remainingTimeLabel": "Remaining time",
-  "pausedCountdownBadge": "Paused"
+  "pausedCountdownBadge": "Paused",
+  "alreadyJoinedSpecializationError": "You already have an active ticket in this specialization.",
+  "queuePausedBadge": "Queue paused",
+  "syncConnectionWarning": "Connection lost. Showing last known status; retrying..."
 }

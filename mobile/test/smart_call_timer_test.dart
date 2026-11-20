@@ -164,6 +164,9 @@ void main() {
       };
 
       final mockClient = MockClient((request) async {
+        if (request.url.path == '/api/queues/my-tickets') {
+          return http.Response(jsonEncode([backendTicket]), 200);
+        }
         if (request.url.path == '/api/queues/my-ticket') {
           return http.Response(jsonEncode(backendTicket), 200);
         }

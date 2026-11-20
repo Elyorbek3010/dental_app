@@ -673,4 +673,15 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get pausedCountdownBadge => 'Paused';
+
+  @override
+  String get alreadyJoinedSpecializationError =>
+      'You already have an active ticket in this specialization.';
+
+  @override
+  String get queuePausedBadge => 'Queue paused';
+
+  @override
+  String get syncConnectionWarning =>
+      'Connection lost. Showing last known status; retrying...';
 }

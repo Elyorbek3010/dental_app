@@ -27,6 +27,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 class FakeQueueService extends QueueService {
   @override
   Future<MyQueueTicket?> getMyTicket() async => null;
+
+  @override
+  Future<List<MyQueueTicket>> getMyTickets() async => [];
 }
 
 class InMemoryTokenStorage implements SecureTokenStorage {
@@ -230,32 +233,38 @@ void main() {
       bool isCheckedInOnBackend = false;
 
       final mockClient = MockClient((request) async {
-        if (request.url.path == '/api/queues/my-ticket') {
+        if (request.url.path == '/api/queues/my-tickets' ||
+            request.url.path == '/api/queues/my-ticket') {
           requestCount++;
-          return http.Response(
-            jsonEncode({
-              'id': 101,
-              'queue_id': 5,
-              'ticket_number': 14,
-              'status': 'WAITING',
-              'created_at': DateTime.now().toIso8601String(),
-              'people_ahead': 2,
+          final ticketJson = {
+            'id': 101,
+            'queue_id': 5,
+            'ticket_number': 14,
+            'status': 'WAITING',
+            'created_at': DateTime.now().toIso8601String(),
+            'people_ahead': 2,
+            'clinic_id': 1,
+            'doctor': {
+              'id': 3,
               'clinic_id': 1,
-              'doctor': {
-                'id': 3,
-                'clinic_id': 1,
-                'full_name': 'Dr. Zokirov',
-                'room_number': '101',
-              },
-              'specialization': {
-                'id': 1,
-                'name': 'Terapiya',
-              },
-              'checked_in_at': isCheckedInOnBackend
-                  ? DateTime.now().toIso8601String()
-                  : null,
-              'check_in_method': isCheckedInOnBackend ? 'RECEPTION' : null,
-            }),
+              'full_name': 'Dr. Zokirov',
+              'room_number': '101',
+            },
+            'specialization': {
+              'id': 1,
+              'name': 'Terapiya',
+            },
+            'checked_in_at': isCheckedInOnBackend
+                ? DateTime.now().toIso8601String()
+                : null,
+            'check_in_method': isCheckedInOnBackend ? 'RECEPTION' : null,
+          };
+          return http.Response(
+            jsonEncode(
+              request.url.path == '/api/queues/my-tickets'
+                  ? [ticketJson]
+                  : ticketJson,
+            ),
             200,
           );
         }
@@ -312,30 +321,36 @@ void main() {
       String currentStatus = 'WAITING';
 
       final mockClient = MockClient((request) async {
-        if (request.url.path == '/api/queues/my-ticket') {
+        if (request.url.path == '/api/queues/my-tickets' ||
+            request.url.path == '/api/queues/my-ticket') {
           requestCount++;
-          return http.Response(
-            jsonEncode({
-              'id': 102,
-              'queue_id': 5,
-              'ticket_number': 22,
-              'status': currentStatus,
-              'created_at': DateTime.now().toIso8601String(),
-              'people_ahead': currentStatus == 'CALLED' ? 0 : 3,
+          final ticketJson = {
+            'id': 102,
+            'queue_id': 5,
+            'ticket_number': 22,
+            'status': currentStatus,
+            'created_at': DateTime.now().toIso8601String(),
+            'people_ahead': currentStatus == 'CALLED' ? 0 : 3,
+            'clinic_id': 1,
+            'doctor': {
+              'id': 3,
               'clinic_id': 1,
-              'doctor': {
-                'id': 3,
-                'clinic_id': 1,
-                'full_name': 'Dr. Aliyev',
-                'room_number': '105',
-              },
-              'specialization': {
-                'id': 1,
-                'name': 'Ortopediya',
-              },
-              'checked_in_at': DateTime.now().toIso8601String(),
-              'check_in_method': 'RECEPTION',
-            }),
+              'full_name': 'Dr. Aliyev',
+              'room_number': '105',
+            },
+            'specialization': {
+              'id': 1,
+              'name': 'Ortopediya',
+            },
+            'checked_in_at': DateTime.now().toIso8601String(),
+            'check_in_method': 'RECEPTION',
+          };
+          return http.Response(
+            jsonEncode(
+              request.url.path == '/api/queues/my-tickets'
+                  ? [ticketJson]
+                  : ticketJson,
+            ),
             200,
           );
         }
@@ -387,33 +402,42 @@ void main() {
       bool isCompleted = false;
 
       final mockClient = MockClient((request) async {
-        if (request.url.path == '/api/queues/my-ticket') {
+        if (request.url.path == '/api/queues/my-tickets' ||
+            request.url.path == '/api/queues/my-ticket') {
           requestCount++;
           if (isCompleted) {
+            if (request.url.path == '/api/queues/my-tickets') {
+              return http.Response(jsonEncode([]), 200);
+            }
             return http.Response(jsonEncode({'detail': 'No active queue ticket found'}), 404);
           }
-          return http.Response(
-            jsonEncode({
-              'id': 103,
-              'queue_id': 5,
-              'ticket_number': 35,
-              'status': 'SERVING',
-              'created_at': DateTime.now().toIso8601String(),
-              'people_ahead': 0,
+          final ticketJson = {
+            'id': 103,
+            'queue_id': 5,
+            'ticket_number': 35,
+            'status': 'SERVING',
+            'created_at': DateTime.now().toIso8601String(),
+            'people_ahead': 0,
+            'clinic_id': 1,
+            'doctor': {
+              'id': 3,
               'clinic_id': 1,
-              'doctor': {
-                'id': 3,
-                'clinic_id': 1,
-                'full_name': 'Dr. Karimov',
-                'room_number': '102',
-              },
-              'specialization': {
-                'id': 1,
-                'name': 'Terapiya',
-              },
-              'checked_in_at': DateTime.now().toIso8601String(),
-              'check_in_method': 'QR',
-            }),
+              'full_name': 'Dr. Karimov',
+              'room_number': '102',
+            },
+            'specialization': {
+              'id': 1,
+              'name': 'Terapiya',
+            },
+            'checked_in_at': DateTime.now().toIso8601String(),
+            'check_in_method': 'QR',
+          };
+          return http.Response(
+            jsonEncode(
+              request.url.path == '/api/queues/my-tickets'
+                  ? [ticketJson]
+                  : ticketJson,
+            ),
             200,
           );
         }

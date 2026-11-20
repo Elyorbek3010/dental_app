@@ -62,6 +62,9 @@ class FakeLocalNotificationService implements LocalNotificationService {
 class FakeQueueService extends QueueService {
   @override
   Future<MyQueueTicket?> getMyTicket() async => null;
+
+  @override
+  Future<List<MyQueueTicket>> getMyTickets() async => [];
 }
 
 void main() {

@@ -58,6 +58,61 @@ router = APIRouter(
 )
 
 
+def _build_my_queue_ticket_response(
+    db: Session,
+    ticket: QueueTicket,
+    queue: Queue,
+    doctor: Doctor,
+    specialization: Specialization,
+    lang: str,
+    server_now: datetime | None = None,
+) -> MyQueueTicketResponse:
+    if ticket.status == TicketStatus.SKIPPED:
+        people_ahead = 0
+    else:
+        people_ahead = (
+            db.scalar(
+                select(func.count(QueueTicket.id)).where(
+                    QueueTicket.queue_id == ticket.queue_id,
+                    QueueTicket.queue_position < ticket.queue_position,
+                    QueueTicket.status.in_([
+                        TicketStatus.WAITING,
+                        TicketStatus.CALLED,
+                        TicketStatus.SERVING,
+                    ]),
+                )
+            )
+            or 0
+        )
+
+    return MyQueueTicketResponse(
+        id=ticket.id,
+        queue_id=ticket.queue_id,
+        ticket_number=ticket.ticket_number,
+        status=ticket.status,
+        created_at=ticket.created_at,
+        checked_in_at=ticket.checked_in_at,
+        check_in_method=ticket.check_in_method,
+        people_ahead=people_ahead,
+        clinic_id=doctor.clinic_id,
+        called_at=ticket.called_at,
+        call_deadline_at=ticket.call_deadline_at,
+        paused_remaining_seconds=ticket.paused_remaining_seconds,
+        is_queue_paused=bool(queue.is_paused),
+        server_time=server_now or datetime.now(timezone.utc),
+        doctor=MyTicketDoctorResponse(
+            id=doctor.id,
+            full_name=doctor.full_name,
+            room_number=doctor.room_number,
+            clinic_id=doctor.clinic_id,
+        ),
+        specialization=MyTicketSpecializationResponse(
+            id=specialization.id,
+            name=specialization.get_localized_name(lang),
+        ),
+    )
+
+
 @router.get(
     "/my-ticket",
     response_model=MyQueueTicketResponse,
@@ -110,51 +165,67 @@ def get_my_ticket(
         )
 
     ticket, queue, doctor, specialization = result
+    return _build_my_queue_ticket_response(db, ticket, queue, doctor, specialization, lang)
 
-    if ticket.status == TicketStatus.SKIPPED:
-        people_ahead = 0
-    else:
-        people_ahead = (
-            db.scalar(
-                select(func.count(QueueTicket.id)).where(
-                    QueueTicket.queue_id == ticket.queue_id,
-                    QueueTicket.queue_position < ticket.queue_position,
-                    QueueTicket.status.in_([
-                        TicketStatus.WAITING,
-                        TicketStatus.CALLED,
-                        TicketStatus.SERVING,
-                    ]),
-                )
-            )
-            or 0
-        )
 
-    return MyQueueTicketResponse(
-        id=ticket.id,
-        queue_id=ticket.queue_id,
-        ticket_number=ticket.ticket_number,
-        status=ticket.status,
-        created_at=ticket.created_at,
-        checked_in_at=ticket.checked_in_at,
-        check_in_method=ticket.check_in_method,
-        people_ahead=people_ahead,
-        clinic_id=doctor.clinic_id,
-        called_at=ticket.called_at,
-        call_deadline_at=ticket.call_deadline_at,
-        paused_remaining_seconds=ticket.paused_remaining_seconds,
-        is_queue_paused=bool(queue.is_paused),
-        server_time=datetime.now(timezone.utc),
-        doctor=MyTicketDoctorResponse(
-            id=doctor.id,
-            full_name=doctor.full_name,
-            room_number=doctor.room_number,
-            clinic_id=doctor.clinic_id,
-        ),
-        specialization=MyTicketSpecializationResponse(
-            id=specialization.id,
-            name=specialization.get_localized_name(lang),
-        ),
+@router.get(
+    "/my-tickets",
+    response_model=list[MyQueueTicketResponse],
+)
+def get_my_tickets(
+    include_skipped: bool = Query(
+        default=False,
+        description="If true, also include today's unresolved SKIPPED tickets alongside active tickets",
+    ),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles(UserRole.PATIENT)),
+    lang: str = Depends(get_language),
+) -> list[MyQueueTicketResponse]:
+    today = date.today()
+    active_filter = QueueTicket.status.in_([
+        TicketStatus.WAITING,
+        TicketStatus.CALLED,
+        TicketStatus.SERVING,
+    ])
+    status_filter = (
+        active_filter | (QueueTicket.status == TicketStatus.SKIPPED)
+        if include_skipped
+        else active_filter
     )
+
+    priority_order = case(
+        (QueueTicket.status == TicketStatus.CALLED, 0),
+        (QueueTicket.status == TicketStatus.SERVING, 1),
+        (QueueTicket.status == TicketStatus.WAITING, 2),
+        (QueueTicket.status == TicketStatus.SKIPPED, 3),
+        else_=4,
+    )
+
+    rows = db.execute(
+        select(QueueTicket, Queue, Doctor, Specialization)
+        .join(Queue, QueueTicket.queue_id == Queue.id)
+        .join(Doctor, Queue.doctor_id == Doctor.id)
+        .join(Specialization, Doctor.specialization_id == Specialization.id)
+        .where(
+            QueueTicket.patient_id == current_user.id,
+            Queue.is_active == True,
+            Queue.queue_date == today,
+            status_filter,
+        )
+        .order_by(
+            priority_order.asc(),
+            QueueTicket.created_at.asc(),
+            QueueTicket.id.asc(),
+        )
+    ).all()
+
+    server_now = datetime.now(timezone.utc)
+    return [
+        _build_my_queue_ticket_response(
+            db, ticket, queue, doctor, specialization, lang, server_now=server_now
+        )
+        for ticket, queue, doctor, specialization in rows
+    ]
 
 
 @router.patch(
@@ -448,39 +519,83 @@ def qr_check_in_patient(
 
     today = date.today()
 
-    tickets = db.scalars(
-        select(QueueTicket)
-        .join(Queue, QueueTicket.queue_id == Queue.id)
-        .join(Doctor, Queue.doctor_id == Doctor.id)
-        .where(
-            QueueTicket.patient_id == current_user.id,
-            QueueTicket.source == TicketSource.ONLINE,
-            QueueTicket.status == TicketStatus.WAITING,
-            Doctor.clinic_id == clinic_id,
-            Queue.queue_date == today,
-            Queue.is_active == True,
-        )
-    ).all()
+    if request.ticket_id is not None:
+        row = db.execute(
+            select(QueueTicket, Queue, Doctor)
+            .join(Queue, QueueTicket.queue_id == Queue.id)
+            .join(Doctor, Queue.doctor_id == Doctor.id)
+            .where(QueueTicket.id == request.ticket_id)
+        ).first()
+        if not row:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="No active waiting ticket found for this clinic",
+            )
+        ticket, ticket_queue, ticket_doctor = row
+        if ticket.patient_id != current_user.id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Cannot check in another patient's ticket",
+            )
+        if (
+            ticket_doctor.clinic_id != clinic_id
+            or not ticket_queue.is_active
+            or ticket_queue.queue_date != today
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="No active waiting ticket found for this clinic",
+            )
+        if ticket.source != TicketSource.ONLINE:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Walk-in tickets are already checked in",
+            )
+        if ticket.status != TicketStatus.WAITING:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Only waiting tickets can be checked in",
+            )
+        if ticket.checked_in_at is not None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Ticket is already checked in",
+            )
+    else:
+        tickets = db.scalars(
+            select(QueueTicket)
+            .join(Queue, QueueTicket.queue_id == Queue.id)
+            .join(Doctor, Queue.doctor_id == Doctor.id)
+            .where(
+                QueueTicket.patient_id == current_user.id,
+                QueueTicket.source == TicketSource.ONLINE,
+                QueueTicket.status == TicketStatus.WAITING,
+                Doctor.clinic_id == clinic_id,
+                Queue.queue_date == today,
+                Queue.is_active == True,
+            )
+        ).all()
 
-    if not tickets:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="No active waiting ticket found for this clinic",
-        )
+        if not tickets:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="No active waiting ticket found for this clinic",
+            )
 
-    if len(tickets) > 1:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Multiple active waiting tickets found for this clinic",
-        )
+        unchecked_tickets = [t for t in tickets if t.checked_in_at is None]
+        if len(unchecked_tickets) > 1:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Multiple active waiting tickets found for this clinic. Please select a ticket to check in.",
+            )
 
-    ticket = tickets[0]
+        ticket = unchecked_tickets[0] if len(unchecked_tickets) == 1 else tickets[0]
 
-    if ticket.checked_in_at is not None:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Ticket is already checked in",
-        )
+        if ticket.checked_in_at is not None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Ticket is already checked in",
+            )
 
     ticket.checked_in_at = datetime.now(timezone.utc)
     ticket.check_in_method = CheckInMethod.QR
@@ -1416,7 +1531,13 @@ def join_queue(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_roles(UserRole.PATIENT)),
 ) -> QueueTicket:
-    # Lock the Queue row for update to ensure concurrency-safe ticket number generation
+    # Consistent lock order: lock the patient User row FIRST to serialize concurrent
+    # bookings across different doctors/specializations, then lock the target Queue row
+    # for concurrency-safe ticket number and position generation.
+    db.scalar(
+        select(User).where(User.id == current_user.id).with_for_update()
+    )
+
     queue = db.scalar(
         select(Queue).where(Queue.id == queue_id).with_for_update()
     )
@@ -1438,22 +1559,53 @@ def join_queue(
             detail="Queue is paused",
         )
 
-    # Check whether current_user already has an active ticket in this queue
+    doctor = db.scalar(select(Doctor).where(Doctor.id == queue.doctor_id))
+    if not doctor:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Doctor not found",
+        )
+
+    unresolved_statuses = [
+        TicketStatus.WAITING,
+        TicketStatus.CALLED,
+        TicketStatus.SERVING,
+        TicketStatus.SKIPPED,
+    ]
+
+    # Check whether current_user already has an unresolved ticket in this exact queue
     active_ticket = db.scalar(
         select(QueueTicket).where(
             QueueTicket.queue_id == queue.id,
             QueueTicket.patient_id == current_user.id,
-            QueueTicket.status.in_([
-                TicketStatus.WAITING,
-                TicketStatus.CALLED,
-                TicketStatus.SERVING,
-            ]),
+            QueueTicket.status.in_(unresolved_statuses),
         )
     )
     if active_ticket:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Patient already has an active ticket in this queue",
+        )
+
+    # Enforce at most one unresolved ticket per patient, specialization, clinic, and queue date
+    same_spec_ticket = db.scalar(
+        select(QueueTicket)
+        .join(Queue, QueueTicket.queue_id == Queue.id)
+        .join(Doctor, Queue.doctor_id == Doctor.id)
+        .where(
+            QueueTicket.patient_id == current_user.id,
+            Doctor.specialization_id == doctor.specialization_id,
+            Doctor.clinic_id == doctor.clinic_id,
+            Queue.queue_date == queue.queue_date,
+            Queue.is_active == True,
+            QueueTicket.status.in_(unresolved_statuses),
+        )
+        .limit(1)
+    )
+    if same_spec_ticket:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Patient already has an active ticket in this specialization",
         )
 
     # Generate the next ticket number and queue position while queue row is locked
@@ -1484,9 +1636,7 @@ def join_queue(
     db.add(ticket)
     db.commit()
     db.refresh(ticket)
-    doctor = db.scalar(select(Doctor).where(Doctor.id == queue.doctor_id))
-    if doctor:
-        notify_display_update(doctor.clinic_id, background_tasks, queue_id=queue.id)
+    notify_display_update(doctor.clinic_id, background_tasks, queue_id=queue.id)
     schedule_joined_notification(ticket.id, background_tasks)
     schedule_approaching_check(queue.id, background_tasks)
     return ticket

@@ -242,8 +242,12 @@ class QueueService {
         );
         final isAlreadyActive =
             detail.toLowerCase().contains('already has an active ticket');
+        final isSameSpecialization =
+            detail.toLowerCase().contains('specialization');
         final userMessage = isAlreadyActive
-            ? 'Sizda allaqachon ushbu navbatda faol talon mavjud.'
+            ? (isSameSpecialization
+                ? 'Sizda ushbu mutaxassislik bo‘yicha allaqachon faol talon mavjud.'
+                : 'Sizda allaqachon ushbu navbatda faol talon mavjud.')
             : detail == 'Queue is inactive'
                 ? 'Navbat hozirda faol emas.'
                 : detail == 'Queue is paused'
@@ -334,6 +338,47 @@ class QueueService {
     }
   }
 
+  /// Fetches all of the patient's active queue tickets.
+  ///
+  /// Calls `GET /api/queues/my-tickets`.
+  /// Returns an empty list if none exist.
+  Future<List<MyQueueTicket>> getMyTickets() async {
+    try {
+      final uri = _includeSkippedInMyTicket
+          ? ApiConfig.myTicketsIncludeSkippedUri
+          : ApiConfig.myTicketsUri;
+      final response = await _getWithAuth(uri);
+
+      if (response.statusCode == 200) {
+        final decoded = jsonDecode(response.body) as List<dynamic>;
+        return decoded
+            .map((item) => MyQueueTicket.fromJson(item as Map<String, dynamic>))
+            .toList();
+      }
+
+      if (response.statusCode == 401) {
+        throw const QueueException(
+          'Autentifikatsiya muddati tugagan. Iltimos, qaytadan kiring.',
+          statusCode: 401,
+        );
+      }
+
+      final errorMsg = _parseErrorMessage(
+        response.body,
+        'Talon maʼlumotlarini yuklashda xatolik yuz berdi (${response.statusCode}).',
+      );
+      throw QueueException(errorMsg, statusCode: response.statusCode);
+    } on QueueException {
+      rethrow;
+    } on SocketException {
+      throw const QueueException(
+        'Serverga ulanib bo‘lmadi. Internet aloqasini tekshiring.',
+      );
+    } catch (e) {
+      throw QueueException('Kutilmagan xatolik yuz berdi: $e');
+    }
+  }
+
   /// Fetches the status summary of a queue (`GET /api/queues/{queue_id}/status`).
   Future<QueueStatus> fetchQueueStatus(int queueId) async {
     try {
@@ -365,16 +410,20 @@ class QueueService {
     }
   }
 
-  /// Performs patient QR check-in by posting the scanned clinic QR token.
+  /// Performs patient QR check-in by posting the scanned clinic QR token
+  /// and optional [ticketId] targeting a specific waiting ticket.
   ///
   /// Calls `POST /api/queues/check-in/qr`.
   /// Never logs raw QR tokens.
-  Future<QueueTicket> checkInWithQr(String qrToken) async {
+  Future<QueueTicket> checkInWithQr(String qrToken, {int? ticketId}) async {
     try {
       final uri = ApiConfig.checkInQrUri;
       // Never log raw QR token
       debugPrint('[QueueService] Submitting QR check-in token...');
-      final response = await _postWithAuth(uri, {'token': qrToken.trim()});
+      final response = await _postWithAuth(uri, {
+        'token': qrToken.trim(),
+        'ticket_id': ?ticketId,
+      });
 
       if (response.statusCode == 200) {
         final decoded = jsonDecode(response.body) as Map<String, dynamic>;

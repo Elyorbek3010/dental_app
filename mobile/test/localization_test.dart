@@ -34,6 +34,9 @@ import 'package:app/services/secure_token_storage.dart';
 class FakeQueueService extends QueueService {
   @override
   Future<MyQueueTicket?> getMyTicket() async => null;
+
+  @override
+  Future<List<MyQueueTicket>> getMyTickets() async => [];
 }
 
 class InMemoryTokenStorage implements SecureTokenStorage {

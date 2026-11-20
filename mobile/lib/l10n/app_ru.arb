@@ -215,5 +215,8 @@
   "fgNotifRestored": "Ваш талон восстановлен в очереди.",
   "fgNotifMissedTurn": "Ваша очередь прошла, талон перемещен в конец очереди.",
   "remainingTimeLabel": "Осталось времени",
-  "pausedCountdownBadge": "Пауза"
+  "pausedCountdownBadge": "Пауза",
+  "alreadyJoinedSpecializationError": "У вас уже есть активный талон по данной специализации.",
+  "queuePausedBadge": "Очередь приостановлена",
+  "syncConnectionWarning": "Нет связи с сервером. Показаны последние данные, повторное подключение..."
 }

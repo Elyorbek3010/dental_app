@@ -64,6 +64,12 @@ class ApiConfig {
   static Uri get myTicketIncludeSkippedUri =>
       Uri.parse('$_baseUrl/api/queues/my-ticket?include_skipped=true');
 
+  static Uri get myTicketsUri =>
+      Uri.parse('$_baseUrl/api/queues/my-tickets');
+
+  static Uri get myTicketsIncludeSkippedUri =>
+      Uri.parse('$_baseUrl/api/queues/my-tickets?include_skipped=true');
+
   static Uri get cancelMyTicketUri =>
       Uri.parse('$_baseUrl/api/queues/my-ticket/cancel');
 
