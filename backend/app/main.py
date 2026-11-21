@@ -1,7 +1,7 @@
 import asyncio
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from sqlalchemy import text
 
 from app.api.admin import router as admin_router
@@ -10,6 +10,8 @@ from app.api.catalog import router as catalog_router
 from app.api.notifications import router as notifications_router
 from app.api.public import router as public_router
 from app.api.queues import router as queues_router
+from app.core.config import settings
+from app.core.rate_limit import limit_health_db
 from app.db.session import engine
 from app.services.smart_call_timer import run_smart_call_timer_loop
 
@@ -39,10 +41,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-    ],
+    allow_origins=settings.cors_origins_list,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -64,7 +63,7 @@ async def health_check():
     }
 
 
-@app.get("/api/health/db")
+@app.get("/api/health/db", dependencies=[Depends(limit_health_db)])
 def database_health_check():
     with engine.connect() as connection:
         connection.execute(text("SELECT 1"))

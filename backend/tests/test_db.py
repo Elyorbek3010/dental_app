@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from app.api.deps import get_db
 from app.core.config import settings
+from app.core.rate_limit import rate_limiter
 from app.main import app as fastapi_app
 from app.db import session as db_session
 from tests.safety_guard import verify_test_db_isolation
@@ -50,6 +51,7 @@ def clean_test_database() -> None:
     Re-verifies isolation before running TRUNCATE.
     """
     verify_test_db_isolation()
+    rate_limiter.reset()
     with test_engine.connect() as conn:
         conn.execute(
             text(

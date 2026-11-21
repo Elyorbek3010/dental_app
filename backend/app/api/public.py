@@ -6,6 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_db, get_language
+from app.core.rate_limit import limit_public_display
 from app.db.session import SessionLocal
 from app.models.clinic import Clinic
 from app.models.doctor import Doctor
@@ -77,6 +78,7 @@ async def public_clinic_display_websocket(
 @router.get(
     "/clinics/{clinic_id}/display",
     response_model=PublicDisplayResponse,
+    dependencies=[Depends(limit_public_display)],
 )
 def get_public_clinic_display(
     clinic_id: int,
