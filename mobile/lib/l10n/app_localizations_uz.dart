@@ -720,4 +720,7 @@ class AppLocalizationsUz extends AppLocalizations {
   @override
   String get queueClosedForNewPatients =>
       'Yangi bemorlar uchun navbat yopilgan.';
+
+  @override
+  String get queueStatusClosing => 'Qabul yopilgan';
 }

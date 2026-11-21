@@ -300,12 +300,15 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                                 color: colors.teal,
                               ),
                               const SizedBox(width: 6),
-                              Text(
-                                l10n.viewLiveQueueLabel,
-                                style: TextStyle(
-                                  fontSize: 11.5,
-                                  fontWeight: FontWeight.w700,
-                                  color: colors.teal,
+                              Flexible(
+                                child: Text(
+                                  l10n.viewLiveQueueLabel,
+                                  softWrap: true,
+                                  style: TextStyle(
+                                    fontSize: 11.5,
+                                    fontWeight: FontWeight.w700,
+                                    color: colors.teal,
+                                  ),
                                 ),
                               ),
                             ],
@@ -333,11 +336,24 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                         const SizedBox(height: 20),
                         SizedBox(
                           width: double.infinity,
-                          child: ElevatedButton.icon(
+                          child: ElevatedButton(
                             key: const Key('home_join_queue_button'),
                             onPressed: () => _navigateToQueueFlow(context),
-                            icon: const Icon(Icons.add_circle_outline, size: 20),
-                            label: Text(l10n.homeJoinQueueButton),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.add_circle_outline, size: 20),
+                                const SizedBox(width: 8),
+                                Flexible(
+                                  child: Text(
+                                    l10n.homeJoinQueueButton,
+                                    textAlign: TextAlign.center,
+                                    softWrap: true,
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
                       ],
@@ -522,10 +538,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                   children: [
                     Row(
                       children: [
-                        StatusChip(
-                          status: ticket.status,
-                          label: ticket.localizedStatus(l10n),
-                          isPaused: ticket.isQueuePaused,
+                        Flexible(
+                          child: StatusChip(
+                            status: ticket.status,
+                            label: ticket.localizedStatus(l10n),
+                            isPaused: ticket.isQueuePaused,
+                          ),
                         ),
                         if (_tickets.length > 1) ...[
                           const SizedBox(width: 6),

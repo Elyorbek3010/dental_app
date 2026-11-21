@@ -717,4 +717,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get queueClosedForNewPatients => 'Queue closed for new patients.';
+
+  @override
+  String get queueStatusClosing => 'Closing';
 }

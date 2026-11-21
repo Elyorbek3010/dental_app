@@ -1152,38 +1152,60 @@ class _MyQueueScreenState extends State<MyQueueScreen> with WidgetsBindingObserv
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             // Specialty & Status header bar
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Expanded(
-                  child: Row(
-                    children: [
-                      Icon(
-                        Icons.confirmation_number_outlined,
-                        color: statusAccent,
-                        size: 18,
-                      ),
-                      const SizedBox(width: 8),
-                      Flexible(
-                        child: Text(
-                          l10n.ticketNumberLabel,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w700,
-                            color: colors.textSecondary,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                StatusChip(
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final textScale = MediaQuery.textScalerOf(context).scale(1.0);
+                final ticketChip = StatusChip(
                   status: ticket.status,
                   label: ticket.localizedStatus(l10n),
                   textKey: const Key('my_ticket_status_badge'),
-                ),
-              ],
+                );
+                final titleRow = Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.confirmation_number_outlined,
+                      color: statusAccent,
+                      size: 18,
+                    ),
+                    const SizedBox(width: 8),
+                    Flexible(
+                      child: Text(
+                        l10n.ticketNumberLabel,
+                        softWrap: true,
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          color: colors.textSecondary,
+                        ),
+                      ),
+                    ),
+                  ],
+                );
+                if (constraints.maxWidth < 260 || textScale > 1.25) {
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      titleRow,
+                      const SizedBox(height: 8),
+                      ticketChip,
+                    ],
+                  );
+                }
+                return Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(child: titleRow),
+                    const SizedBox(width: 10),
+                    ConstrainedBox(
+                      constraints: BoxConstraints(
+                        maxWidth: constraints.maxWidth * 0.45,
+                      ),
+                      child: ticketChip,
+                    ),
+                  ],
+                );
+              },
             ),
             const SizedBox(height: 18),
 
@@ -1336,28 +1358,32 @@ class _MyQueueScreenState extends State<MyQueueScreen> with WidgetsBindingObserv
         children: [
           Icon(icon, size: 16, color: colors.teal),
           const SizedBox(width: 8),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 10.5,
-                  fontWeight: FontWeight.w600,
-                  color: colors.textSecondary,
+          Flexible(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  softWrap: true,
+                  style: TextStyle(
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w600,
+                    color: colors.textSecondary,
+                  ),
                 ),
-              ),
-              Text(
-                value,
-                key: valueKey,
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
-                  color: colors.textPrimary,
-                  fontFeatures: const [FontFeature.tabularFigures()],
+                Text(
+                  value,
+                  key: valueKey,
+                  softWrap: true,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: colors.textPrimary,
+                    fontFeatures: const [FontFeature.tabularFigures()],
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ],
       ),
@@ -1521,12 +1547,15 @@ class _MyQueueScreenState extends State<MyQueueScreen> with WidgetsBindingObserv
             children: [
               Icon(Icons.notifications_active_outlined, size: 18, color: colors.blue),
               const SizedBox(width: 8),
-              Text(
-                l10n.myQueueReminderTitle,
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w700,
-                  color: colors.textPrimary,
+              Expanded(
+                child: Text(
+                  l10n.myQueueReminderTitle,
+                  softWrap: true,
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    color: colors.textPrimary,
+                  ),
                 ),
               ),
             ],

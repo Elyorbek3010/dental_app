@@ -723,4 +723,7 @@ class AppLocalizationsRu extends AppLocalizations {
   @override
   String get queueClosedForNewPatients =>
       'Очередь закрыта для новых пациентов.';
+
+  @override
+  String get queueStatusClosing => 'Приём закрыт';
 }
