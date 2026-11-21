@@ -4,6 +4,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, get_db
+from app.core.rate_limit import limit_login, limit_refresh, limit_register
 from app.core.security import (
     create_access_token,
     create_refresh_token,
@@ -31,6 +32,7 @@ router = APIRouter(
     "/register",
     response_model=UserResponse,
     status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(limit_register)],
 )
 def register(
     user_in: UserRegister,
@@ -62,6 +64,7 @@ def register(
 @router.post(
     "/login",
     response_model=TokenResponse,
+    dependencies=[Depends(limit_login)],
 )
 def login(
     credentials: UserLogin,
@@ -94,6 +97,7 @@ def login(
 @router.post(
     "/refresh",
     response_model=AccessTokenResponse,
+    dependencies=[Depends(limit_refresh)],
 )
 def refresh_token(
     refresh_in: RefreshTokenRequest,

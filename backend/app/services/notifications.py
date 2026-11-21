@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+import json
 import logging
 from pathlib import Path
 from typing import Any
@@ -33,17 +34,17 @@ def mask_token(token: str) -> str:
     return f"{token[:4]}...{token[-4:]}"
 
 
-def get_firebase_credentials_path() -> Path | None:
+def get_firebase_credentials_path(raw_path_override: str | None = None) -> Path | None:
     """
-    Resolves the Firebase service-account JSON path from settings.
-    Checks absolute paths, paths relative to the current working directory,
-    and paths relative to the backend project root.
+    Resolves the Firebase service-account JSON path from settings (or override).
+    Supports Render Secret Files (e.g. /etc/secrets/firebase-service-account.json),
+    paths relative to CWD, and paths relative to the backend project root.
     """
-    raw_path = settings.FIREBASE_CREDENTIALS_PATH
-    if not raw_path:
+    raw_path = raw_path_override if raw_path_override is not None else settings.FIREBASE_CREDENTIALS_PATH
+    if not raw_path or not raw_path.strip():
         return None
 
-    candidate = Path(raw_path)
+    candidate = Path(raw_path.strip())
     if candidate.is_absolute():
         if candidate.is_file():
             return candidate
@@ -98,8 +99,28 @@ def initialize_firebase() -> bool:
         logger.info("Firebase Admin SDK successfully initialized.")
         return True
     except Exception as exc:
-        logger.error("Failed to initialize Firebase Admin SDK: %s", exc)
+        logger.error("Failed to initialize Firebase Admin SDK: %s", type(exc).__name__)
         return False
+
+
+def check_firebase_credentials_status(raw_path_override: str | None = None) -> dict[str, Any]:
+    """
+    Checks whether a Firebase service-account JSON file exists and is structurally valid
+    without returning private keys, client emails, or file contents.
+    """
+    cred_path = get_firebase_credentials_path(raw_path_override=raw_path_override)
+    if not cred_path:
+        return {"configured": False, "valid": False, "reason": "missing_file"}
+
+    try:
+        payload = json.loads(cred_path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        return {"configured": True, "valid": False, "reason": "invalid_json"}
+
+    if not isinstance(payload, dict) or payload.get("type") != "service_account" or not payload.get("project_id"):
+        return {"configured": True, "valid": False, "reason": "invalid_service_account_schema"}
+
+    return {"configured": True, "valid": True, "reason": "ok"}
 
 
 def build_fcm_message(
