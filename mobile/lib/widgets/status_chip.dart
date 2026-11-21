@@ -35,14 +35,17 @@ class StatusChip extends StatelessWidget {
         children: [
           Icon(visual.icon, size: 14, color: visual.fg),
           const SizedBox(width: 5),
-          Text(
-            label,
-            key: textKey,
-            style: TextStyle(
-              fontSize: 11.5,
-              fontWeight: FontWeight.w700,
-              color: visual.fg,
-              letterSpacing: 0.1,
+          Flexible(
+            child: Text(
+              label,
+              key: textKey,
+              softWrap: true,
+              style: TextStyle(
+                fontSize: 11.5,
+                fontWeight: FontWeight.w700,
+                color: visual.fg,
+                letterSpacing: 0.1,
+              ),
             ),
           ),
         ],
@@ -60,6 +63,12 @@ class StatusChip extends StatelessWidget {
     }
 
     switch (status.toUpperCase()) {
+      case 'CLOSING':
+        return _StatusVisual(
+          fg: colors.warning,
+          bg: colors.warningSoft,
+          icon: Icons.lock_clock_outlined,
+        );
       case 'CALLED':
         return _StatusVisual(
           fg: colors.warning,

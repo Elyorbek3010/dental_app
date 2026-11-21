@@ -1395,6 +1395,12 @@ abstract class AppLocalizations {
   /// In uz, this message translates to:
   /// **'Yangi bemorlar uchun navbat yopilgan.'**
   String get queueClosedForNewPatients;
+
+  /// No description provided for @queueStatusClosing.
+  ///
+  /// In uz, this message translates to:
+  /// **'Qabul yopilgan'**
+  String get queueStatusClosing;
 }
 
 class _AppLocalizationsDelegate

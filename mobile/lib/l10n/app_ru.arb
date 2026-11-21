@@ -229,5 +229,6 @@
   "clinicPortalBadge": "Стоматологическая клиника",
   "searchSpecialtiesHint": "Поиск направления...",
   "chooseCareSubtitle": "Выберите направление для записи",
-  "queueClosedForNewPatients": "Очередь закрыта для новых пациентов."
+  "queueClosedForNewPatients": "Очередь закрыта для новых пациентов.",
+  "queueStatusClosing": "Приём закрыт"
 }

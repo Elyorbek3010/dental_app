@@ -301,34 +301,48 @@ class _DoctorQueueScreenState extends State<DoctorQueueScreen> {
                   color: colors.surface,
                   border: Border(top: BorderSide(color: colors.border)),
                 ),
-                child: ElevatedButton.icon(
-                  key: const Key('doctor_queue_join_button'),
-                  onPressed: (_isJoining || queue.isPaused || queue.isClosing)
-                      ? null
-                      : () => _handleJoinQueue(l10n),
-                  icon: _isJoining
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
+                child: SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    key: const Key('doctor_queue_join_button'),
+                    onPressed: (_isJoining || queue.isPaused || queue.isClosing)
+                        ? null
+                        : () => _handleJoinQueue(l10n),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        _isJoining
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              )
+                            : Icon(
+                                queue.isClosing
+                                    ? Icons.lock_clock_outlined
+                                    : Icons.add_circle_outline,
+                                size: 20,
+                              ),
+                        const SizedBox(width: 8),
+                        Flexible(
+                          child: Text(
+                            _isJoining
+                                ? l10n.loadingText
+                                : (queue.isClosing
+                                    ? l10n.queueClosedForNewPatients
+                                    : (queue.isPaused
+                                        ? l10n.queueTemporarilyPaused
+                                        : l10n.joinQueueButton)),
+                            textAlign: TextAlign.center,
+                            softWrap: true,
                           ),
-                        )
-                      : Icon(
-                          queue.isClosing
-                              ? Icons.lock_clock_outlined
-                              : Icons.add_circle_outline,
-                          size: 20,
                         ),
-                  label: Text(
-                    _isJoining
-                        ? l10n.loadingText
-                        : (queue.isClosing
-                            ? l10n.queueClosedForNewPatients
-                            : (queue.isPaused
-                                ? l10n.queueTemporarilyPaused
-                                : l10n.joinQueueButton)),
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -440,12 +454,15 @@ class _DoctorQueueScreenState extends State<DoctorQueueScreen> {
                                       color: colors.textSecondary,
                                     ),
                                     const SizedBox(width: 4),
-                                    Text(
-                                      l10n.roomNumberDoctorFormat(widget.doctor.roomNumber!),
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w600,
-                                        color: colors.textSecondary,
+                                    Flexible(
+                                      child: Text(
+                                        l10n.roomNumberDoctorFormat(widget.doctor.roomNumber!),
+                                        softWrap: true,
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w600,
+                                          color: colors.textSecondary,
+                                        ),
                                       ),
                                     ),
                                   ],
@@ -484,131 +501,229 @@ class _DoctorQueueScreenState extends State<DoctorQueueScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  l10n.todayQueueHeader,
-                                  style: TextStyle(
-                                    fontSize: 16.5,
-                                    fontWeight: FontWeight.w800,
-                                    color: colors.textPrimary,
-                                  ),
-                                ),
-                                const SizedBox(height: 2),
-                                Text(
-                                  queue.queueDate,
-                                  style: TextStyle(
-                                    fontSize: 12.5,
-                                    fontWeight: FontWeight.w500,
-                                    color: colors.textSecondary,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          StatusChip(
+                      LayoutBuilder(
+                        builder: (context, constraints) {
+                          final textScale = MediaQuery.textScalerOf(context).scale(1.0);
+                          final badge = StatusChip(
                             status: queue.isClosing
-                                ? 'PAUSED'
+                                ? 'CLOSING'
                                 : (queue.isPaused ? 'PAUSED' : 'SERVING'),
-                            isPaused: queue.isPaused || queue.isClosing,
+                            isPaused: queue.isPaused && !queue.isClosing,
+                            textKey: const Key('doctor_queue_status_chip'),
                             label: queue.isClosing
-                                ? l10n.queueClosedForNewPatients
+                                ? l10n.queueStatusClosing
                                 : (queue.isPaused
                                     ? l10n.queueStatusPaused
                                     : l10n.queueStatusActive),
-                          ),
-                        ],
+                          );
+                          final headingBlock = Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                l10n.todayQueueHeader,
+                                key: const Key('doctor_queue_today_header'),
+                                style: TextStyle(
+                                  fontSize: 16.5,
+                                  fontWeight: FontWeight.w800,
+                                  height: 1.25,
+                                  color: colors.textPrimary,
+                                ),
+                              ),
+                              const SizedBox(height: 3),
+                              Text(
+                                queue.queueDate,
+                                style: TextStyle(
+                                  fontSize: 12.5,
+                                  fontWeight: FontWeight.w500,
+                                  color: colors.textSecondary,
+                                ),
+                              ),
+                            ],
+                          );
+
+                          // Move status badge cleanly below heading when horizontal space is tight
+                          // or text scale is enlarged so long Russian/Uzbek headings never collapse.
+                          final stackHeader = constraints.maxWidth < 300 || textScale > 1.15;
+                          if (stackHeader) {
+                            return Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                headingBlock,
+                                const SizedBox(height: 10),
+                                badge,
+                              ],
+                            );
+                          }
+
+                          return Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Expanded(child: headingBlock),
+                              const SizedBox(width: 12),
+                              ConstrainedBox(
+                                constraints: BoxConstraints(
+                                  maxWidth: constraints.maxWidth * 0.42,
+                                ),
+                                child: badge,
+                              ),
+                            ],
+                          );
+                        },
                       ),
-                      const SizedBox(height: 18),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: _buildMetricTile(
-                              colors: colors,
-                              label: l10n.currentlyServingLabel,
-                              value: '${queue.servingCount}',
-                              valueKey: const Key('prejoin_serving_count'),
-                              color: colors.teal,
-                              icon: Icons.medical_services_outlined,
+                      if (queue.isClosing || queue.isPaused) ...[
+                        const SizedBox(height: 12),
+                        Container(
+                          key: const Key('doctor_queue_notice_banner'),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 10,
+                          ),
+                          decoration: BoxDecoration(
+                            color: colors.warningSoft,
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(
+                              color: colors.warning.withValues(alpha: 0.35),
                             ),
                           ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: _buildMetricTile(
-                              colors: colors,
-                              label: l10n.waitingCountLabel,
-                              value: '${queue.waitingCount}',
-                              valueKey: const Key('prejoin_waiting_count'),
-                              color: colors.blue,
-                              icon: Icons.schedule_rounded,
-                            ),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Padding(
+                                padding: const EdgeInsets.only(top: 1),
+                                child: Icon(
+                                  queue.isClosing
+                                      ? Icons.lock_clock_outlined
+                                      : Icons.pause_circle_outline_rounded,
+                                  size: 18,
+                                  color: colors.warning,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  queue.isClosing
+                                      ? l10n.queueClosedForNewPatients
+                                      : l10n.queueTemporarilyPaused,
+                                  style: TextStyle(
+                                    fontSize: 12.5,
+                                    fontWeight: FontWeight.w600,
+                                    height: 1.35,
+                                    color: colors.textPrimary,
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: _buildMetricTile(
-                              colors: colors,
-                              label: l10n.calledCountLabel,
-                              value: '${queue.calledCount}',
-                              valueKey: const Key('prejoin_called_count'),
-                              color: colors.warning,
-                              icon: Icons.notifications_active_outlined,
+                        ),
+                      ],
+                      const SizedBox(height: 16),
+                      LayoutBuilder(
+                        builder: (context, constraints) {
+                          final textScale = MediaQuery.textScalerOf(context).scale(1.0);
+                          final servingTile = _buildMetricTile(
+                            colors: colors,
+                            label: l10n.currentlyServingLabel,
+                            value: '${queue.servingCount}',
+                            valueKey: const Key('prejoin_serving_count'),
+                            color: colors.teal,
+                            icon: Icons.medical_services_outlined,
+                          );
+                          final waitingTile = _buildMetricTile(
+                            colors: colors,
+                            label: l10n.waitingCountLabel,
+                            value: '${queue.waitingCount}',
+                            valueKey: const Key('prejoin_waiting_count'),
+                            color: colors.blue,
+                            icon: Icons.schedule_rounded,
+                          );
+                          final calledTile = _buildMetricTile(
+                            colors: colors,
+                            label: l10n.calledCountLabel,
+                            value: '${queue.calledCount}',
+                            valueKey: const Key('prejoin_called_count'),
+                            color: colors.warning,
+                            icon: Icons.notifications_active_outlined,
+                          );
+
+                          if (constraints.maxWidth < 255 || textScale >= 1.3) {
+                            return Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                IntrinsicHeight(
+                                  child: Row(
+                                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                                    children: [
+                                      Expanded(child: servingTile),
+                                      const SizedBox(width: 8),
+                                      Expanded(child: waitingTile),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                calledTile,
+                              ],
+                            );
+                          }
+
+                          return IntrinsicHeight(
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                Expanded(child: servingTile),
+                                const SizedBox(width: 8),
+                                Expanded(child: waitingTile),
+                                const SizedBox(width: 8),
+                                Expanded(child: calledTile),
+                              ],
                             ),
-                          ),
-                        ],
+                          );
+                        },
                       ),
                     ],
                   ),
                 ),
                 bottomSection: Padding(
                   padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              l10n.ifYouJoinNowLabel,
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                                color: colors.textSecondary,
-                              ),
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      final textScale = MediaQuery.textScalerOf(context).scale(1.0);
+                      final infoBlock = Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            l10n.ifYouJoinNowLabel,
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: colors.textSecondary,
                             ),
-                            const SizedBox(height: 3),
-                            Text(
-                              l10n.estimatedPositionLabel,
-                              style: TextStyle(
-                                fontSize: 15,
-                                fontWeight: FontWeight.w800,
-                                color: colors.textPrimary,
-                              ),
+                          ),
+                          const SizedBox(height: 3),
+                          Text(
+                            l10n.estimatedPositionLabel,
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w800,
+                              color: colors.textPrimary,
                             ),
-                            const SizedBox(height: 3),
-                            Text(
-                              l10n.peopleAhead(
-                                queue.waitingCount +
-                                    queue.calledCount +
-                                    queue.servingCount,
-                              ),
-                              key: const Key('prejoin_people_ahead_text'),
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                                color: colors.blue,
-                              ),
+                          ),
+                          const SizedBox(height: 3),
+                          Text(
+                            l10n.peopleAhead(
+                              queue.waitingCount +
+                                  queue.calledCount +
+                                  queue.servingCount,
                             ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Container(
+                            key: const Key('prejoin_people_ahead_text'),
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: colors.blue,
+                            ),
+                          ),
+                        ],
+                      );
+                      final positionPill = Container(
                         padding: const EdgeInsets.symmetric(
                           horizontal: 16,
                           vertical: 9,
@@ -632,8 +747,28 @@ class _DoctorQueueScreenState extends State<DoctorQueueScreen> {
                             fontFeatures: const [FontFeature.tabularFigures()],
                           ),
                         ),
-                      ),
-                    ],
+                      );
+
+                      if (constraints.maxWidth < 245 || textScale >= 1.45) {
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            infoBlock,
+                            const SizedBox(height: 12),
+                            positionPill,
+                          ],
+                        );
+                      }
+
+                      return Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Expanded(child: infoBlock),
+                          const SizedBox(width: 12),
+                          positionPill,
+                        ],
+                      );
+                    },
                   ),
                 ),
               ),
@@ -653,13 +788,14 @@ class _DoctorQueueScreenState extends State<DoctorQueueScreen> {
     required IconData icon,
   }) {
     return Container(
-      padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
+      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 6),
       decoration: BoxDecoration(
         color: colors.surfaceMuted,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: colors.border),
       ),
       child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Icon(icon, size: 17, color: color),
           const SizedBox(height: 6),
@@ -677,11 +813,11 @@ class _DoctorQueueScreenState extends State<DoctorQueueScreen> {
           Text(
             label,
             textAlign: TextAlign.center,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
+            softWrap: true,
             style: TextStyle(
               fontSize: 11,
               fontWeight: FontWeight.w600,
+              height: 1.25,
               color: colors.textSecondary,
             ),
           ),
