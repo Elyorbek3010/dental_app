@@ -18,6 +18,9 @@ from app.models.user import User, UserRole
 from app.realtime import notify_display_update
 from app.services.shift_service import ACTIVE_SHIFT_STATUSES, get_clinic_local_date
 from app.services.queue_notifications import (
+    check_and_trigger_approaching,
+    get_active_tickets_with_four_plus_ahead,
+    reset_approaching_on_requeue,
     schedule_approaching_check,
     schedule_called_notification,
     schedule_completed_notification,
@@ -268,6 +271,7 @@ def cancel_my_ticket(
             detail="Ticket can no longer be cancelled",
         )
     doctor = db.scalar(select(Doctor).where(Doctor.id == queue.doctor_id)) if queue else None
+    jumped_ids = get_active_tickets_with_four_plus_ahead(db, queue.id) if queue else []
 
     ticket.status = TicketStatus.CANCELLED
     clear_ticket_call_countdown(ticket)
@@ -279,7 +283,7 @@ def cancel_my_ticket(
     elif doctor:
         notify_display_update(doctor.clinic_id, background_tasks)
     if queue:
-        schedule_approaching_check(queue.id, background_tasks)
+        schedule_approaching_check(queue.id, background_tasks, jumped_candidate_ids=jumped_ids)
 
     return ticket
 
@@ -933,6 +937,7 @@ def call_next_patient(
         )
 
     timeout_seconds = get_clinic_timeout_seconds(db, doctor.clinic_id)
+    pre_jumped_ids = get_active_tickets_with_four_plus_ahead(db, queue.id)
     advance_result = advance_smart_call_for_queue(
         db,
         queue.id,
@@ -941,6 +946,7 @@ def call_next_patient(
     called_ticket = advance_result.called_ticket
     passed_ticket_ids = advance_result.passed_ticket_ids
     repositioned_any = advance_result.repositioned_any
+    jumped_ids = [tid for tid in pre_jumped_ids if tid not in set(passed_ticket_ids)]
 
     if not called_ticket:
         db.commit()
@@ -948,6 +954,11 @@ def call_next_patient(
             notify_display_update(doctor.clinic_id, None, queue_id=queue.id)
         for passed_id in passed_ticket_ids:
             trigger_missed_turn_notification(passed_id)
+        check_and_trigger_approaching(
+            queue.id,
+            jumped_candidate_ids=jumped_ids,
+            exclude_ticket_ids=advance_result.suppress_approaching_ticket_ids,
+        )
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="No checked-in patient available",
@@ -960,7 +971,12 @@ def call_next_patient(
         schedule_missed_turn_notification(passed_id, background_tasks)
     if called_ticket.patient_id is not None:
         schedule_called_notification(called_ticket.id, doctor.room_number, background_tasks)
-    schedule_approaching_check(queue.id, background_tasks)
+    schedule_approaching_check(
+        queue.id,
+        background_tasks,
+        jumped_candidate_ids=jumped_ids,
+        exclude_ticket_ids=advance_result.suppress_approaching_ticket_ids,
+    )
     return called_ticket
 
 
@@ -1325,6 +1341,8 @@ def _commit_and_build_handoff_response(
     advance_result: SmartCallAdvanceResult,
     primary_notification_fn,
     background_tasks: BackgroundTasks = None,
+    *,
+    jumped_candidate_ids: list[int] | None = None,
 ) -> CompleteTicketResponse:
     """Commit ticket transition + optional auto-call atomically and schedule notifications."""
     auto_called_ticket = advance_result.called_ticket
@@ -1340,7 +1358,16 @@ def _commit_and_build_handoff_response(
         schedule_missed_turn_notification(passed_id, background_tasks)
     if auto_called_ticket is not None and auto_called_ticket.patient_id is not None:
         schedule_called_notification(auto_called_ticket.id, doctor.room_number, background_tasks)
-    schedule_approaching_check(queue.id, background_tasks)
+    repositioned_set = set(advance_result.passed_ticket_ids)
+    filtered_jumped = [
+        tid for tid in (jumped_candidate_ids or []) if tid not in repositioned_set
+    ]
+    schedule_approaching_check(
+        queue.id,
+        background_tasks,
+        jumped_candidate_ids=filtered_jumped,
+        exclude_ticket_ids=advance_result.suppress_approaching_ticket_ids,
+    )
 
     response = CompleteTicketResponse.model_validate(ticket)
     if auto_called_ticket is not None:
@@ -1385,6 +1412,7 @@ def complete_patient(
             detail="Only serving tickets can be completed",
         )
 
+    jumped_ids = get_active_tickets_with_four_plus_ahead(db, queue.id)
     ticket.status = TicketStatus.COMPLETED
     ticket.completed_at = datetime.now(timezone.utc)
     # Flush COMPLETED transition before checking active tickets or running Smart Call advance
@@ -1399,6 +1427,7 @@ def complete_patient(
         advance_result=advance_result,
         primary_notification_fn=schedule_completed_notification,
         background_tasks=background_tasks,
+        jumped_candidate_ids=jumped_ids,
     )
 
 
@@ -1439,6 +1468,7 @@ def skip_patient(
             detail="Only waiting or called tickets can be skipped",
         )
 
+    jumped_ids = get_active_tickets_with_four_plus_ahead(db, queue.id)
     previous_status = ticket.status
     ticket.status = TicketStatus.SKIPPED
     clear_ticket_call_countdown(ticket)
@@ -1459,6 +1489,7 @@ def skip_patient(
         advance_result=advance_result,
         primary_notification_fn=schedule_skipped_notification,
         background_tasks=background_tasks,
+        jumped_candidate_ids=jumped_ids,
     )
 
 
@@ -1535,12 +1566,18 @@ def restore_patient(
 
     ticket.status = TicketStatus.WAITING
     ticket.queue_position = new_queue_position
+    db.flush()
+    suppress_self = reset_approaching_on_requeue(db, queue.id, ticket)
     db.commit()
     db.refresh(ticket)
     notify_display_update(doctor.clinic_id, background_tasks, queue_id=queue.id)
     if ticket.patient_id is not None:
         schedule_restored_notification(ticket.id, background_tasks)
-    schedule_approaching_check(queue.id, background_tasks)
+    schedule_approaching_check(
+        queue.id,
+        background_tasks,
+        exclude_ticket_ids=[ticket.id] if suppress_self else None,
+    )
     return ticket
 
 
@@ -1612,12 +1649,13 @@ def cancel_patient(
             detail="Shift has already finished",
         )
 
+    jumped_ids = get_active_tickets_with_four_plus_ahead(db, queue.id)
     ticket.status = TicketStatus.CANCELLED
     clear_ticket_call_countdown(ticket)
     db.commit()
     db.refresh(ticket)
     notify_display_update(doctor.clinic_id, background_tasks, queue_id=queue.id)
-    schedule_approaching_check(queue.id, background_tasks)
+    schedule_approaching_check(queue.id, background_tasks, jumped_candidate_ids=jumped_ids)
     return ticket
 
 
@@ -1779,14 +1817,26 @@ def miss_turn_patient(
     )
     next_queue_position = (current_max_pos or 0) + 1
 
+    jumped_ids = [
+        tid
+        for tid in get_active_tickets_with_four_plus_ahead(db, queue.id)
+        if tid != ticket.id
+    ]
     ticket.missed_turns += 1
     ticket.queue_position = next_queue_position
+    db.flush()
+    suppress_self = reset_approaching_on_requeue(db, queue.id, ticket)
     db.commit()
     db.refresh(ticket)
     notify_display_update(doctor.clinic_id, background_tasks, queue_id=queue.id)
     if ticket.patient_id is not None:
         schedule_missed_turn_notification(ticket.id, background_tasks)
-    schedule_approaching_check(queue.id, background_tasks)
+    schedule_approaching_check(
+        queue.id,
+        background_tasks,
+        jumped_candidate_ids=jumped_ids,
+        exclude_ticket_ids=[ticket.id] if suppress_self else None,
+    )
     return ticket
 
 

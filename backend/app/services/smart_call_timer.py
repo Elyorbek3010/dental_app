@@ -18,6 +18,8 @@ from app.services.shift_service import ACTIVE_SHIFT_STATUSES
 from app.realtime import notify_display_update
 from app.services.queue_notifications import (
     check_and_trigger_approaching,
+    get_active_tickets_with_four_plus_ahead,
+    reset_approaching_on_requeue,
     trigger_called_notification,
     trigger_missed_turn_notification,
     trigger_skipped_notification,
@@ -34,6 +36,7 @@ class SmartCallAdvanceResult:
     called_ticket: QueueTicket | None = None
     passed_ticket_ids: list[int] = field(default_factory=list)
     repositioned_any: bool = False
+    suppress_approaching_ticket_ids: list[int] = field(default_factory=list)
 
 
 @dataclass
@@ -45,6 +48,8 @@ class SmartCallSweepEvent:
     passed_ticket_ids: list[int] = field(default_factory=list)
     called_ticket_id: int | None = None
     repositioned_any: bool = False
+    jumped_candidate_ids: list[int] = field(default_factory=list)
+    suppress_approaching_ticket_ids: list[int] = field(default_factory=list)
 
 
 def _as_utc(dt: datetime) -> datetime:
@@ -135,6 +140,7 @@ def advance_smart_call_for_queue(
 
     result = SmartCallAdvanceResult()
     current_now = _as_utc(now) if now is not None else datetime.now(timezone.utc)
+    repositioned_tickets: list[QueueTicket] = []
 
     for ticket in waiting_tickets:
         if ticket.checked_in_at is None:
@@ -142,12 +148,19 @@ def advance_smart_call_for_queue(
             ticket.missed_turns += 1
             ticket.queue_position = current_max_pos
             result.repositioned_any = True
+            repositioned_tickets.append(ticket)
             if ticket.patient_id is not None:
                 result.passed_ticket_ids.append(ticket.id)
         else:
             start_ticket_call_countdown(ticket, timeout_seconds, now=current_now)
             result.called_ticket = ticket
             break
+
+    if repositioned_tickets:
+        db.flush()
+        for ticket in repositioned_tickets:
+            if reset_approaching_on_requeue(db, queue_id, ticket):
+                result.suppress_approaching_ticket_ids.append(ticket.id)
 
     return result
 
@@ -160,7 +173,11 @@ def dispatch_sweep_notifications(event: SmartCallSweepEvent) -> None:
         trigger_missed_turn_notification(passed_id)
     if event.called_ticket_id is not None:
         trigger_called_notification(event.called_ticket_id, event.room_number)
-    check_and_trigger_approaching(event.queue_id)
+    check_and_trigger_approaching(
+        event.queue_id,
+        jumped_candidate_ids=event.jumped_candidate_ids,
+        exclude_ticket_ids=event.suppress_approaching_ticket_ids,
+    )
 
 
 def _sweep_single_queue(
@@ -205,6 +222,7 @@ def _sweep_single_queue(
             return None
 
         timeout_seconds = get_clinic_timeout_seconds(db, doctor.clinic_id)
+        pre_jumped_ids = get_active_tickets_with_four_plus_ahead(db, queue.id)
 
         skipped_ticket_ids: list[int] = []
         for expired in expired_tickets:
@@ -238,6 +256,9 @@ def _sweep_single_queue(
                 now=current_now,
             )
 
+        repositioned_set = set(advance_result.passed_ticket_ids)
+        jumped_ids = [tid for tid in pre_jumped_ids if tid not in repositioned_set]
+
         db.commit()
 
         return SmartCallSweepEvent(
@@ -252,6 +273,8 @@ def _sweep_single_queue(
                 else None
             ),
             repositioned_any=advance_result.repositioned_any,
+            jumped_candidate_ids=jumped_ids,
+            suppress_approaching_ticket_ids=advance_result.suppress_approaching_ticket_ids,
         )
 
 
