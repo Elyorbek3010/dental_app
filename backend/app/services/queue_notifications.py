@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from sqlalchemy import select, update
+from sqlalchemy.orm import Session
 
 from app.db import session as db_session
 from app.models.push_device import PushDevice
@@ -61,6 +62,13 @@ def dispatch_patient_notification(
                     data=data,
                 )
                 results.append(res)
+                if not res.success:
+                    logger.warning(
+                        "Push notification delivery failed for patient_id=%s device_id=%s error_code=%s",
+                        patient_id,
+                        device.id,
+                        res.error_code,
+                    )
                 if res.is_unregistered:
                     stale_device_ids.append(device.id)
 
@@ -408,74 +416,146 @@ def trigger_completed_notification(ticket_id: int) -> None:
         )
 
 
-def check_and_trigger_approaching(queue_id: int) -> None:
+ACTIVE_QUEUE_STATUSES = (
+    TicketStatus.WAITING,
+    TicketStatus.CALLED,
+    TicketStatus.SERVING,
+)
+
+
+def get_active_tickets_with_four_plus_ahead(db: Session, queue_id: int) -> list[int]:
     """
-    Evaluates whether any WAITING ticket in queue_id now has exactly 3 active people ahead.
-    Uses existing real queue ordering semantics based on queue_position and active statuses
-    (WAITING, CALLED, SERVING).
-    
-    By definition of distinct queue_position ordering, the 4th active ticket (offset 3)
-    has exactly 3 active tickets ahead. No other ticket can have exactly 3 people ahead.
-    
-    If that 4th active ticket is WAITING, has a registered patient_id, and approaching_notified_at
-    is NULL, it is atomically claimed and notified.
-    
-    Concurrency safety:
-    Atomic SQL update ensures that even if concurrent queue mutations run this check simultaneously,
-    only ONE worker claims approaching_notified_at and dispatches the notification.
+    Returns IDs of unnotified WAITING registered tickets in `queue_id` that currently
+    have 4 or more active tickets ahead (index >= 4), so subsequent jumps across
+    the 3-ahead threshold can still be detected cleanly.
+    """
+    active_tickets = list(
+        db.scalars(
+            select(QueueTicket)
+            .where(
+                QueueTicket.queue_id == queue_id,
+                QueueTicket.status.in_(ACTIVE_QUEUE_STATUSES),
+            )
+            .order_by(QueueTicket.queue_position.asc())
+        ).all()
+    )
+    return [
+        t.id
+        for idx, t in enumerate(active_tickets)
+        if idx >= 4
+        and t.status == TicketStatus.WAITING
+        and t.patient_id is not None
+        and t.approaching_notified_at is None
+    ]
+
+
+def reset_approaching_on_requeue(db: Session, queue_id: int, ticket: QueueTicket) -> bool:
+    """
+    Re-evaluates 3-ahead notification eligibility after a ticket moves to the back
+    via Miss Turn or Skip -> Restore.
+
+    - If >= 4 active tickets are now ahead of `ticket`, clears `approaching_notified_at`
+      so the patient receives a fresh notification on their new approach.
+    - If <= 3 active tickets are ahead (queue is already short), keeps prior notified state
+      and returns True so an immediate misleading second notification is suppressed.
+    """
+    ahead_count = len(
+        db.scalars(
+            select(QueueTicket.id).where(
+                QueueTicket.queue_id == queue_id,
+                QueueTicket.id != ticket.id,
+                QueueTicket.status.in_(ACTIVE_QUEUE_STATUSES),
+                QueueTicket.queue_position < ticket.queue_position,
+            )
+        ).all()
+    )
+    if ahead_count >= 4:
+        ticket.approaching_notified_at = None
+        return False
+    return True
+
+
+def check_and_trigger_approaching(
+    queue_id: int,
+    jumped_candidate_ids: list[int] | None = None,
+    exclude_ticket_ids: list[int] | None = None,
+) -> None:
+    """
+    Evaluates whether any unnotified WAITING registered ticket in `queue_id` now has
+    3 active people ahead (`offset(3)`), OR crossed from >= 4 ahead down to 1..2 ahead
+    because multiple tickets ahead left/repositioned in one step.
+
+    Concurrency & status safety:
+    Atomic SQL UPDATE claims `approaching_notified_at` only while `status == WAITING`
+    and `approaching_notified_at IS NULL`, guaranteeing at most one notification per
+    approach and never notifying cancelled, skipped, or completed tickets.
     """
     try:
+        excluded = set(exclude_ticket_ids or ())
+        jumped = set(jumped_candidate_ids or ())
+
         with db_session.SessionLocal() as db:
-            candidate = db.scalar(
-                select(QueueTicket)
-                .where(
-                    QueueTicket.queue_id == queue_id,
-                    QueueTicket.status.in_([
-                        TicketStatus.WAITING,
-                        TicketStatus.CALLED,
-                        TicketStatus.SERVING,
-                    ]),
-                )
-                .order_by(QueueTicket.queue_position.asc())
-                .offset(3)
-                .limit(1)
+            active_tickets = list(
+                db.scalars(
+                    select(QueueTicket)
+                    .where(
+                        QueueTicket.queue_id == queue_id,
+                        QueueTicket.status.in_(ACTIVE_QUEUE_STATUSES),
+                    )
+                    .order_by(QueueTicket.queue_position.asc())
+                ).all()
             )
 
-            if (
-                candidate is None
-                or candidate.status != TicketStatus.WAITING
-                or candidate.patient_id is None
-                or candidate.approaching_notified_at is not None
-            ):
+            targets: list[tuple[QueueTicket, int]] = []
+            for idx, candidate in enumerate(active_tickets):
+                if (
+                    candidate.status != TicketStatus.WAITING
+                    or candidate.patient_id is None
+                    or candidate.approaching_notified_at is not None
+                    or candidate.id in excluded
+                ):
+                    continue
+                if idx == 3 or (idx in (1, 2) and candidate.id in jumped):
+                    targets.append((candidate, idx))
+
+            if not targets:
                 return
 
             now = datetime.now(timezone.utc)
-            # Atomic update claim:
-            claimed = db.execute(
-                update(QueueTicket)
-                .where(
-                    QueueTicket.id == candidate.id,
-                    QueueTicket.approaching_notified_at.is_(None),
-                )
-                .values(approaching_notified_at=now)
-            ).rowcount
-            db.commit()
+            to_notify: list[tuple[int, int, int]] = []
+            for candidate, ahead_count in targets:
+                claimed = db.execute(
+                    update(QueueTicket)
+                    .where(
+                        QueueTicket.id == candidate.id,
+                        QueueTicket.status == TicketStatus.WAITING,
+                        QueueTicket.approaching_notified_at.is_(None),
+                    )
+                    .values(approaching_notified_at=now)
+                ).rowcount
+                if claimed > 0 and candidate.patient_id is not None:
+                    to_notify.append((candidate.id, candidate.patient_id, ahead_count))
 
-            if claimed > 0:
+            if to_notify:
+                db.commit()
+
+            for claimed_ticket_id, patient_id, ahead_count in to_notify:
                 logger.info(
-                    "Approaching notification claimed for ticket_id=%s (patient_id=%s, queue_id=%s)",
-                    candidate.id,
-                    candidate.patient_id,
+                    "Approaching notification claimed for ticket_id=%s (patient_id=%s, queue_id=%s, ahead=%s)",
+                    claimed_ticket_id,
+                    patient_id,
                     queue_id,
+                    ahead_count,
                 )
                 dispatch_patient_notification(
-                    patient_id=candidate.patient_id,
+                    patient_id=patient_id,
                     title="Dental Queue",
-                    body="Navbatingiz yaqinlashmoqda. Oldingizda 3 kishi qoldi.",
+                    body=f"Navbatingiz yaqinlashmoqda. Oldingizda {ahead_count} kishi qoldi.",
                     data={
                         "type": "QUEUE_APPROACHING",
-                        "ticket_id": str(candidate.id),
+                        "ticket_id": str(claimed_ticket_id),
                         "queue_id": str(queue_id),
+                        "ahead_count": str(ahead_count),
                     },
                 )
     except Exception as exc:
@@ -547,8 +627,23 @@ def schedule_completed_notification(ticket_id: int, background_tasks: Any = None
         trigger_completed_notification(ticket_id)
 
 
-def schedule_approaching_check(queue_id: int, background_tasks: Any = None) -> None:
+def schedule_approaching_check(
+    queue_id: int,
+    background_tasks: Any = None,
+    *,
+    jumped_candidate_ids: list[int] | None = None,
+    exclude_ticket_ids: list[int] | None = None,
+) -> None:
     if background_tasks is not None and hasattr(background_tasks, "add_task"):
-        background_tasks.add_task(check_and_trigger_approaching, queue_id)
+        background_tasks.add_task(
+            check_and_trigger_approaching,
+            queue_id,
+            jumped_candidate_ids,
+            exclude_ticket_ids,
+        )
     else:
-        check_and_trigger_approaching(queue_id)
+        check_and_trigger_approaching(
+            queue_id,
+            jumped_candidate_ids=jumped_candidate_ids,
+            exclude_ticket_ids=exclude_ticket_ids,
+        )

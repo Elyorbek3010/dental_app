@@ -241,11 +241,11 @@ def send_push_notification(
         logger.error(
             "Unexpected error sending push notification to %s: %s",
             mask_token(token),
-            exc,
+            type(exc).__name__,
         )
         return PushNotificationResult(
             success=False,
             error_code="UNEXPECTED_ERROR",
-            error_message=str(exc),
+            error_message=type(exc).__name__,
             is_unregistered=False,
         )
