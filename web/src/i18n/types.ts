@@ -100,6 +100,7 @@ export interface TranslationDictionary {
   smartCallModeManualNotice: string;
   autoCalledNextSuffix: string;
   manualCall: string;
+  manualCallRequiresCheckIn: string;
   addWalkIn: string;
   callAgain: string;
   callAgainDisabledHint: string;

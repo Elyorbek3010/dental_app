@@ -1062,6 +1062,12 @@ def call_patient(
             detail="Only waiting tickets can be called",
         )
 
+    if ticket.checked_in_at is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Patient has not checked in at the clinic yet",
+        )
+
     timeout_seconds = get_clinic_timeout_seconds(db, doctor.clinic_id)
     start_ticket_call_countdown(ticket, timeout_seconds)
     db.commit()

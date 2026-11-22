@@ -285,7 +285,7 @@ class SmartCallTimerTest(unittest.TestCase):
             )
             self.assertEqual(conflict_res.status_code, 409)
 
-            # Skip t1 -> then Manual Call on unchecked-in t2 succeeds and starts countdown
+            # Skip t1 -> Manual Call on still-unchecked-in t2 fails 409, then check-in -> succeeds 200 and starts countdown
             skip_res = self.client.patch(
                 f"/api/queues/{queue.id}/tickets/{t1.id}/skip",
                 headers=self.rec1_headers,
@@ -293,6 +293,19 @@ class SmartCallTimerTest(unittest.TestCase):
             self.assertEqual(skip_res.status_code, 200)
             self.assertIsNone(skip_res.json()["call_deadline_at"])
 
+            blocked_manual = self.client.patch(
+                f"/api/queues/{queue.id}/tickets/{t2.id}/call",
+                headers=self.rec1_headers,
+            )
+            self.assertEqual(blocked_manual.status_code, 409)
+
+            self.assertEqual(
+                self.client.patch(
+                    f"/api/queues/{queue.id}/tickets/{t2.id}/check-in",
+                    headers=self.rec1_headers,
+                ).status_code,
+                200,
+            )
             manual_res = self.client.patch(
                 f"/api/queues/{queue.id}/tickets/{t2.id}/call",
                 headers=self.rec1_headers,

@@ -241,6 +241,13 @@ class MultipleActiveQueuesTest(unittest.TestCase):
             t2_id = r2.json()["id"]
 
             # Complete t2 -> resolved -> patient CAN re-book Dr. Ortho A
+            self.assertEqual(
+                self.client.patch(
+                    f"/api/queues/{q_ortho_b.id}/tickets/{t2_id}/check-in",
+                    headers=self.rec1_headers,
+                ).status_code,
+                200,
+            )
             self.client.patch(f"/api/queues/{q_ortho_b.id}/tickets/{t2_id}/call", headers=self.rec1_headers)
             self.client.patch(f"/api/queues/{q_ortho_b.id}/tickets/{t2_id}/serve", headers=self.rec1_headers)
             self.client.patch(f"/api/queues/{q_ortho_b.id}/tickets/{t2_id}/complete", headers=self.rec1_headers)
@@ -367,6 +374,8 @@ class MultipleActiveQueuesTest(unittest.TestCase):
             t1 = self.client.post(f"/api/queues/{q_ortho.id}/join", headers=self.p1_headers).json()
             t2 = self.client.post(f"/api/queues/{q_surgeon.id}/join", headers=self.p1_headers).json()
 
+            self.client.patch(f"/api/queues/{q_ortho.id}/tickets/{t1['id']}/check-in", headers=self.rec1_headers)
+            self.client.patch(f"/api/queues/{q_surgeon.id}/tickets/{t2['id']}/check-in", headers=self.rec1_headers)
             self.client.patch(f"/api/queues/{q_ortho.id}/tickets/{t1['id']}/call", headers=self.rec1_headers)
             self.client.patch(f"/api/queues/{q_surgeon.id}/tickets/{t2['id']}/call", headers=self.rec1_headers)
 
@@ -458,6 +467,7 @@ class MultipleActiveQueuesTest(unittest.TestCase):
         ):
             t1 = self.client.post(f"/api/queues/{q_ortho.id}/join", headers=self.p1_headers).json()
             t2 = self.client.post(f"/api/queues/{q_surgeon.id}/join", headers=self.p1_headers).json()
+            self.client.patch(f"/api/queues/{q_ortho.id}/tickets/{t1['id']}/check-in", headers=self.rec1_headers)
             self.client.patch(f"/api/queues/{q_ortho.id}/tickets/{t1['id']}/call", headers=self.rec1_headers)
 
             # Another patient cannot cancel p1's ticket
