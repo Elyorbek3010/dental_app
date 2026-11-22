@@ -23,6 +23,7 @@ from app.services.queue_notifications import (
     reset_approaching_on_requeue,
     schedule_approaching_check,
     schedule_called_notification,
+    schedule_cancelled_notification,
     schedule_completed_notification,
     schedule_joined_notification,
     schedule_missed_turn_notification,
@@ -1591,6 +1592,7 @@ def cancel_patient(
     background_tasks: BackgroundTasks = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_roles(UserRole.RECEPTIONIST, UserRole.ADMIN, UserRole.PATIENT)),
+    lang: str = Depends(get_language),
 ) -> QueueTicket:
     queue = db.scalar(select(Queue).where(Queue.id == queue_id).with_for_update())
     if not queue:
@@ -1649,12 +1651,15 @@ def cancel_patient(
             detail="Shift has already finished",
         )
 
+    cancelled_by_staff = current_user.role in (UserRole.RECEPTIONIST, UserRole.ADMIN)
     jumped_ids = get_active_tickets_with_four_plus_ahead(db, queue.id)
     ticket.status = TicketStatus.CANCELLED
     clear_ticket_call_countdown(ticket)
     db.commit()
     db.refresh(ticket)
     notify_display_update(doctor.clinic_id, background_tasks, queue_id=queue.id)
+    if cancelled_by_staff and ticket.patient_id is not None:
+        schedule_cancelled_notification(ticket.id, lang, background_tasks)
     schedule_approaching_check(queue.id, background_tasks, jumped_candidate_ids=jumped_ids)
     return ticket
 
