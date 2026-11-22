@@ -259,6 +259,10 @@ export const QueueManagementPage: React.FC = () => {
 
   const handleManualCall = async (ticket: QueueTicket) => {
     if (!selectedQueueId) return;
+    if (ticket.checked_in_at === null) {
+      setNotice({ type: 'error', message: t.manualCallRequiresCheckIn });
+      return;
+    }
     setActionInProgress(`call-${ticket.id}`);
     setNotice(null);
     try {
@@ -1081,6 +1085,11 @@ export const QueueManagementPage: React.FC = () => {
                             <span className="shrink-0">• {ticket.source === 'WALK_IN' ? t.sourceWalkIn : t.sourceOnline}</span>
                             {ticket.patient_phone && <span className="hidden sm:inline tabular-nums truncate">• {ticket.patient_phone}</span>}
                           </div>
+                          {!isCheckedIn && (
+                            <p className="mt-0.5 text-[11px] font-medium text-amber-700 dark:text-amber-300">
+                              {t.manualCallRequiresCheckIn}
+                            </p>
+                          )}
                         </div>
                       </div>
 
@@ -1091,22 +1100,28 @@ export const QueueManagementPage: React.FC = () => {
                           </span>
                         )}
 
-                        <AppButton
-                          variant="blue"
-                          size="xs"
-                          title={t.manualCall}
-                          disabled={
-                            isBusy ||
-                            actionInProgress !== null ||
-                            activeQueue?.is_paused ||
-                            !!calledTicket ||
-                            !!servingTicket
-                          }
-                          onClick={() => handleManualCall(ticket)}
-                          icon={<BellRing className="h-3.5 w-3.5" />}
+                        <span
+                          className="inline-flex"
+                          title={!isCheckedIn ? t.manualCallRequiresCheckIn : t.manualCall}
                         >
-                          {t.manualCall}
-                        </AppButton>
+                          <AppButton
+                            variant="blue"
+                            size="xs"
+                            aria-label={!isCheckedIn ? t.manualCallRequiresCheckIn : t.manualCall}
+                            disabled={
+                              !isCheckedIn ||
+                              isBusy ||
+                              actionInProgress !== null ||
+                              activeQueue?.is_paused ||
+                              !!calledTicket ||
+                              !!servingTicket
+                            }
+                            onClick={() => handleManualCall(ticket)}
+                            icon={<BellRing className="h-3.5 w-3.5" />}
+                          >
+                            {t.manualCall}
+                          </AppButton>
+                        </span>
 
                         {!isCheckedIn && ticket.source === 'ONLINE' && (
                           <AppButton

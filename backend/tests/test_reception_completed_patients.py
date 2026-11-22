@@ -182,6 +182,13 @@ class ReceptionCompletedPatientsTest(unittest.TestCase):
         )
         self.assertEqual(join_res.status_code, 201)
         online_ticket_id = join_res.json()["id"]
+        self.assertEqual(
+            self.client.patch(
+                f"/api/queues/{queue_id}/tickets/{online_ticket_id}/check-in",
+                headers=self.rec1_headers,
+            ).status_code,
+            200,
+        )
         self._complete_ticket(queue_id, online_ticket_id, self.rec1_headers)
 
         # 2. WALK_IN patient added and completes
