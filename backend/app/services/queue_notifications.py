@@ -302,6 +302,132 @@ def trigger_restored_notification(ticket_id: int) -> None:
         )
 
 
+def build_cancelled_notification_content(
+    lang: str = "uz",
+    doctor_name: str | None = None,
+    clinic_name: str | None = None,
+) -> tuple[str, str]:
+    """
+    Formats localized (title, body) for a Reception-initiated ticket cancellation
+    in Uzbek ('uz'), Russian ('ru'), or English ('en') with dynamic doctor/clinic context.
+    """
+    normalized_lang = (lang or "uz").strip().lower()
+    if normalized_lang not in ("uz", "ru", "en"):
+        normalized_lang = "uz"
+
+    clean_doctor = doctor_name.strip() if doctor_name and doctor_name.strip() else None
+    clean_clinic = clinic_name.strip() if clinic_name and clinic_name.strip() else None
+
+    if clean_doctor and clean_clinic:
+        context = f"{clean_doctor} ({clean_clinic})"
+    else:
+        context = clean_doctor or clean_clinic
+
+    if normalized_lang == "ru":
+        title = "Ваша запись отменена"
+        if context:
+            body = (
+                f"Ваша очередь к {context} отменена регистратурой. "
+                "Для подробной информации обратитесь в регистратуру."
+            )
+        else:
+            body = (
+                "Ваша очередь отменена регистратурой. "
+                "Для подробной информации обратитесь в регистратуру."
+            )
+        return title, body
+
+    if normalized_lang == "en":
+        title = "Queue ticket cancelled"
+        if context:
+            body = (
+                f"Your queue ticket for {context} was cancelled by reception. "
+                "Please contact reception for details."
+            )
+        else:
+            body = (
+                "Your queue ticket was cancelled by reception. "
+                "Please contact reception for details."
+            )
+        return title, body
+
+    title = "Navbatingiz bekor qilindi"
+    if context:
+        body = (
+            f"{context} qabulidagi navbatingiz qabulxona tomonidan bekor qilindi. "
+            "Batafsil ma'lumot uchun qabulxonaga murojaat qiling."
+        )
+    else:
+        body = (
+            "Navbatingiz qabulxona tomonidan bekor qilindi. "
+            "Batafsil ma'lumot uchun qabulxonaga murojaat qiling."
+        )
+    return title, body
+
+
+def trigger_cancelled_notification(ticket_id: int, lang: str = "uz") -> None:
+    """
+    Triggered when Reception or Admin manually cancels a registered patient's ticket.
+    Verifies ticket status is CANCELLED before dispatching.
+    """
+    try:
+        doctor_name: str | None = None
+        clinic_name: str | None = None
+        with db_session.SessionLocal() as db:
+            ticket = db.scalar(
+                select(QueueTicket).where(QueueTicket.id == ticket_id)
+            )
+            if (
+                not ticket
+                or ticket.patient_id is None
+                or ticket.status != TicketStatus.CANCELLED
+            ):
+                return
+
+            patient_id = ticket.patient_id
+            ticket_number = ticket.ticket_number
+            queue_id = ticket.queue_id
+
+            from app.models.clinic import Clinic
+            from app.models.doctor import Doctor
+            from app.models.queue import Queue
+
+            queue = db.scalar(select(Queue).where(Queue.id == queue_id))
+            if queue:
+                doctor = db.scalar(select(Doctor).where(Doctor.id == queue.doctor_id))
+                if doctor:
+                    doctor_name = doctor.full_name
+                    clinic = db.scalar(select(Clinic).where(Clinic.id == doctor.clinic_id))
+                    if clinic:
+                        clinic_name = clinic.name
+
+        title, body = build_cancelled_notification_content(
+            lang=lang,
+            doctor_name=doctor_name,
+            clinic_name=clinic_name,
+        )
+        dispatch_patient_notification(
+            patient_id=patient_id,
+            title=title,
+            body=body,
+            data={
+                "type": "QUEUE_CANCELLED",
+                "ticket_id": str(ticket_id),
+                "ticket_number": str(ticket_number),
+                "queue_id": str(queue_id),
+                "doctor_name": doctor_name or "",
+                "clinic_name": clinic_name or "",
+            },
+        )
+    except Exception as exc:
+        logger.error(
+            "Error triggering cancelled notification for ticket %s: %s",
+            ticket_id,
+            exc,
+            exc_info=True,
+        )
+
+
 def trigger_paused_notification(queue_id: int) -> None:
     """
     Triggered when a queue transitions from active to paused.
@@ -625,6 +751,17 @@ def schedule_completed_notification(ticket_id: int, background_tasks: Any = None
         background_tasks.add_task(trigger_completed_notification, ticket_id)
     else:
         trigger_completed_notification(ticket_id)
+
+
+def schedule_cancelled_notification(
+    ticket_id: int,
+    lang: str = "uz",
+    background_tasks: Any = None,
+) -> None:
+    if background_tasks is not None and hasattr(background_tasks, "add_task"):
+        background_tasks.add_task(trigger_cancelled_notification, ticket_id, lang)
+    else:
+        trigger_cancelled_notification(ticket_id, lang=lang)
 
 
 def schedule_approaching_check(
